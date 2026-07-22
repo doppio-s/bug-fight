@@ -1,0 +1,2953 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>クワガタバトル</title>
+<style>
+  * {
+    box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  body {
+    margin: 0; overflow: hidden; background: #1a1a1a;
+    font-family: 'Arial', sans-serif; color: #fff;
+    width: 100%; height: 100vh;
+  }
+  canvas { display: block; }
+
+  #info {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    background: rgba(0,0,0,0.7); padding: 12px 16px; border-radius: 8px;
+    font-size: 13px; line-height: 1.5;
+    border-left: 3px solid #ffcc44; max-width: 260px;
+  }
+  #info h1 { margin: 0 0 8px 0; font-size: 18px; color: #ffcc44; font-weight: bold; }
+  kbd {
+    background: #333; padding: 3px 6px; border-radius: 3px;
+    border: 1px solid #555; font-family: 'Courier New', monospace;
+    font-size: 11px; display: inline-block; margin: 0 2px;
+  }
+
+  /* 状態表示 */
+  #status {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 12; background: rgba(0,0,0,0.7); padding: 10px 24px;
+    border-radius: 20px; font-size: 16px; font-weight: bold;
+    border: 2px solid #ffcc44; color: #ffcc44; text-align: center;
+    transition: all 0.2s;
+  }
+  #status.grabbing { border-color: #ff6644; color: #ff6644; }
+
+  #loading {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 28px; color: #ffcc44; z-index: 20; text-align: center;
+    background: rgba(0,0,0,0.8); padding: 40px; border-radius: 12px; min-width: 250px;
+  }
+
+  /* タッチコントローラー */
+  #touchControls {
+    position: absolute; bottom: 20px; left: 0; right: 0; width: 100%;
+    display: flex; justify-content: center; align-items: flex-end;
+    gap: 50px; padding: 0 20px 20px 20px; box-sizing: border-box;
+    pointer-events: none; z-index: 15;
+  }
+  .dpad-container { position: relative; width: 150px; height: 150px; pointer-events: auto; }
+  .dpad-bg {
+    position: absolute; width: 100%; height: 100%;
+    background: rgba(255,255,255,0.08); border-radius: 50%;
+    border: 3px solid rgba(100,150,255,0.4); box-shadow: 0 0 15px rgba(100,150,255,0.2);
+  }
+  .dpad-button {
+    position: absolute; width: 55px; height: 55px;
+    background: rgba(100,150,255,0.3); border: 2px solid rgba(100,150,255,0.8);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: bold; cursor: pointer; transition: all 0.1s ease;
+    touch-action: none; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .dpad-button:active, .dpad-button.active {
+    background: rgba(100,150,255,0.7); border-color: rgba(100,150,255,1);
+    box-shadow: 0 0 12px rgba(100,150,255,0.8); transform: scale(0.95);
+  }
+  #dpad-up { top: 5px; left: 47px; }
+  #dpad-down { bottom: 5px; left: 47px; }
+  #dpad-left { top: 47px; left: 5px; }
+  #dpad-right { top: 47px; right: 5px; }
+
+  .button-container { display: flex; gap: 15px; pointer-events: auto; align-items: flex-end; }
+  .action-button {
+    width: 90px; height: 90px; border-radius: 50%;
+    border: 3px solid rgba(255,80,80,0.9); background: rgba(255,80,80,0.4);
+    font-size: 32px; font-weight: bold; cursor: pointer; transition: all 0.05s ease;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.3); touch-action: none; line-height: 1;
+  }
+  .action-button:active, .action-button.active {
+    background: rgba(255,80,80,0.8); border-color: rgba(255,100,100,1);
+    box-shadow: 0 0 20px rgba(255,80,80,0.8); transform: scale(0.9);
+  }
+  #attackBtn span { font-size: 14px; margin-top: 4px; font-weight: normal; }
+  .attack-stack { display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: auto; }
+  .action-button.secondary {
+    width: 78px; height: 78px;
+    background: rgba(180,80,200,0.25); border-color: rgba(220,120,240,0.7);
+    box-shadow: 0 0 15px rgba(180,80,200,0.4);
+  }
+  .action-button.secondary:active,
+  .action-button.secondary.active {
+    background: rgba(230,140,255,0.9); border-color: rgba(255,180,255,1);
+    box-shadow: 0 0 25px rgba(230,140,255,0.9);
+  }
+  #blowawayBtn span { font-size: 12px; margin-top: 3px; font-weight: normal; }
+
+  /* 攻撃ジョイスティック */
+  #atkStick {
+    position: relative;
+    width: 140px; height: 140px;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  #atkStickBase {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,100,80,0.18) 0%, rgba(255,100,80,0.08) 60%, transparent 100%);
+    border: 3px solid rgba(255,110,90,0.5);
+    box-shadow: 0 0 18px rgba(255,90,70,0.3);
+  }
+  #atkStickBase::after {
+    content: '🦷';
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-size: 16px; opacity: 0.75;
+  }
+  #atkStickKnob {
+    position: absolute;
+    width: 66px; height: 66px;
+    left: 50%; top: 50%;
+    margin-left: -33px; margin-top: -33px;
+    border-radius: 50%;
+    background: rgba(255,80,80,0.55);
+    border: 3px solid rgba(255,140,120,0.95);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    box-shadow: 0 0 15px rgba(255,80,80,0.7), 0 3px 8px rgba(0,0,0,0.4);
+    will-change: transform;
+  }
+
+  /* ガード/ロックオン用ミニボタン */
+  .mini-buttons { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; margin-right: 5px; }
+  .mini-btn {
+    width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(80,110,180,0.35); border: 2px solid rgba(120,150,220,0.7);
+    color: white; font-size: 22px; font-weight: bold;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    box-shadow: 0 0 12px rgba(80,110,180,0.4), 0 3px 8px rgba(0,0,0,0.4);
+    transition: all 0.1s ease;
+  }
+  .mini-btn span { font-size: 11px; margin-top: 2px; font-weight: normal; }
+  .mini-btn:active, .mini-btn.active {
+    background: rgba(120,180,255,0.75); border-color: rgba(180,220,255,1);
+    box-shadow: 0 0 20px rgba(120,180,255,0.9); transform: scale(0.92);
+  }
+  #lockonBtn.active {
+    background: rgba(255,180,80,0.75); border-color: rgba(255,220,120,1);
+    box-shadow: 0 0 20px rgba(255,180,80,0.9);
+  }
+
+  /* 大きいガードボタン(右親指ですぐ押せる) */
+  .guard-btn {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: rgba(80,140,220,0.35); border: 3px solid rgba(120,170,255,0.8);
+    color: white; font-size: 30px; font-weight: bold;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    box-shadow: 0 0 15px rgba(80,140,220,0.5), 0 3px 8px rgba(0,0,0,0.4);
+    pointer-events: auto;
+    transition: all 0.08s ease;
+  }
+  .guard-btn span { font-size: 13px; margin-top: 2px; font-weight: normal; }
+  .guard-btn:active, .guard-btn.active {
+    background: rgba(120,180,255,0.85); border-color: rgba(180,220,255,1);
+    box-shadow: 0 0 28px rgba(120,180,255,1); transform: scale(0.93);
+  }
+  .push-btn {
+    width: 78px; height: 78px; border-radius: 50%;
+    background: rgba(200,140,60,0.35); border: 3px solid rgba(240,180,90,0.8);
+    color: white; font-size: 26px; font-weight: bold;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    box-shadow: 0 0 15px rgba(200,140,60,0.5), 0 3px 8px rgba(0,0,0,0.4);
+    pointer-events: auto; transition: all 0.08s ease;
+  }
+  .push-btn span { font-size: 12px; margin-top: 2px; font-weight: normal; }
+  .push-btn:active {
+    background: rgba(255,190,90,0.9); border-color: rgba(255,220,150,1);
+    box-shadow: 0 0 26px rgba(255,190,90,1); transform: scale(0.92);
+  }
+
+  @media (max-width: 768px) {
+    #info { font-size: 11px; padding: 8px 12px; max-width: 170px; }
+    #info h1 { font-size: 14px; margin-bottom: 6px; }
+    kbd { font-size: 9px; padding: 2px 4px; margin: 1px; }
+    #status { font-size: 13px; padding: 8px 16px; }
+    #touchControls { gap: 30px; padding: 0 10px 10px 10px; bottom: 10px; }
+    .dpad-container { width: 130px; height: 130px; }
+    .dpad-button { width: 48px; height: 48px; font-size: 22px; }
+    #dpad-up { top: 2px; left: 41px; }
+    #dpad-down { bottom: 2px; left: 41px; }
+    #dpad-left { top: 41px; left: 2px; }
+    #dpad-right { top: 41px; right: 2px; }
+    .action-button { width: 70px; height: 70px; font-size: 24px; border-width: 2px; }
+    #attackBtn span { font-size: 11px; margin-top: 2px; }
+  }
+
+  #debugPanel {
+    position: absolute; bottom: 20px; right: 20px;
+    background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; border-radius: 4px;
+    font-size: 11px; font-family: monospace; max-width: 220px; max-height: 160px;
+    overflow-y: auto; display: none; z-index: 5; white-space: pre-wrap;
+  }
+  #debugPanel.show { display: block; }
+  #resultOverlay {
+    position: fixed; inset: 0;
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.55);
+    z-index: 200;
+  }
+  #resultOverlay.show { display: flex; }
+  #resultText {
+    font-size: 64px; font-weight: 900; margin-bottom: 30px;
+    letter-spacing: 0.05em;
+  }
+  #resultText.win {
+    color: #ffd700;
+    text-shadow: 0 0 30px rgba(255,200,0,0.8), 3px 3px 0 #7a5000;
+  }
+  #resultText.lose {
+    color: #99aabb;
+    text-shadow: 0 0 20px rgba(100,120,150,0.6), 3px 3px 0 #223344;
+  }
+  #restartBtn {
+    font-size: 22px; padding: 14px 40px; border-radius: 30px;
+    border: 3px solid #ffcc44; background: rgba(255,180,50,0.25); color: #ffe0a0;
+    cursor: pointer; font-weight: bold;
+  }
+  #restartBtn:active { transform: scale(0.95); background: rgba(255,180,50,0.5); }
+  #diffOverlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10,15,10,0.82);
+    z-index: 300;
+  }
+  #diffOverlay.hide { display: none; }
+  #diffTitle {
+    font-size: 32px; font-weight: 900; color: #ffe0a0;
+    margin-bottom: 28px; text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    text-align: center;
+  }
+  .diff-buttons { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+  .diffBtn {
+    font-size: 21px; padding: 16px 30px; border-radius: 16px;
+    border: 3px solid rgba(255,200,100,0.6); background: rgba(60,45,25,0.85); color: #ffe0a0;
+    cursor: pointer; font-weight: bold;
+  }
+  .diffBtn:active { transform: scale(0.94); background: rgba(255,180,50,0.4); }
+  #staminaBar {
+    position: absolute; top: 66px; left: 50%; transform: translateX(-50%);
+    width: 260px; height: 22px; z-index: 10;
+    background: rgba(0,0,0,0.65);
+    border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  #staminaFill {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #22cc66 0%, #88ff33 50%, #ccff44 100%);
+    transition: width 0.15s ease, background 0.2s;
+    box-shadow: inset 0 -6px 8px rgba(0,0,0,0.2);
+  }
+  #staminaFill.medium { background: linear-gradient(90deg, #ffcc22 0%, #ffdd44 100%); }
+  #staminaFill.low    { background: linear-gradient(90deg, #ff5533 0%, #ff8844 100%); animation: pulseLow 0.6s infinite alternate; }
+  @keyframes pulseLow {
+    from { filter: brightness(1); }
+    to   { filter: brightness(1.3); }
+  }
+  #staminaLabel {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: white; font-size: 11px; font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    letter-spacing: 0.1em;
+    pointer-events: none;
+  }
+  #clashFlash {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at center, rgba(255, 230, 150, 0.95) 0%, rgba(255, 180, 80, 0.5) 30%, transparent 70%);
+    opacity: 0;
+    transition: opacity 80ms ease-out;
+    z-index: 100;
+  }
+  #clashFlash.active { opacity: 1; }
+  #clashText {
+    position: fixed;
+    top: 40%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: 72px;
+    font-weight: 900;
+    color: #ffe680;
+    text-shadow:
+      0 0 20px rgba(255,120,0,0.9),
+      0 0 40px rgba(255,80,0,0.7),
+      3px 3px 0 #7a2000,
+      -3px -3px 0 #7a2000,
+      3px -3px 0 #7a2000,
+      -3px 3px 0 #7a2000;
+    letter-spacing: 0.05em;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 101;
+    white-space: nowrap;
+  }
+  #clashText.active {
+    animation: clashPop 900ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+  @keyframes clashPop {
+    0%   { transform: translate(-50%, -50%) scale(0)   rotate(-15deg); opacity: 0; }
+    15%  { transform: translate(-50%, -50%) scale(1.3) rotate(5deg);   opacity: 1; }
+    25%  { transform: translate(-50%, -50%) scale(1.0) rotate(-2deg);  opacity: 1; }
+    75%  { transform: translate(-50%, -50%) scale(1.0) rotate(0deg);   opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(0.8) rotate(0deg);   opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="info">
+  <h1>🪲 クワガタバトル</h1>
+  <div><kbd>W</kbd><kbd>↑</kbd> 前進 / <kbd>S</kbd><kbd>↓</kbd> 後退</div>
+  <div><kbd>A</kbd><kbd>←</kbd> 左回転 / <kbd>D</kbd><kbd>→</kbd> 右回転</div>
+  <div><kbd>Space</kbd>押し → 構え（顎パカッ）</div>
+  <div>構え中<kbd>W</kbd> → 突進</div>
+  <div><kbd>Space</kbd>離す → 掴み投げ（前方・赤く光る）</div>
+  <div><kbd>E</kbd> プッシュ（長押しで溜め＝威力UP・黄色く光る／場外へ）</div>
+  <div style="color:#ffcc66;font-size:11px;margin-top:2px;">三すくみ: 掴み&gt;ガード &gt;プッシュ &gt;掴み</div>
+  <div>📱 右スティック: 下引き→掴み（引く量=顎の開き＝威力）</div>
+  <div><kbd>Shift</kbd> ガード（敵の攻撃を弾き返す／移動半減）</div>
+  <div><kbd>Q</kbd> ロックオン（相手を向く／A/Dで回り込み）</div>
+  <div><kbd>V</kbd> 当たり判定表示</div>
+</div>
+
+<div id="status">相手に近づいて攻撃しよう！</div>
+
+<div id="staminaBar">
+  <div id="staminaFill"></div>
+  <div id="staminaLabel">STAMINA</div>
+</div>
+
+<div id="clashFlash"></div>
+<div id="clashText">⚔ 正面激突！！！</div>
+
+<div id="resultOverlay">
+  <div id="resultText">🏆 勝利！！</div>
+  <button id="restartBtn">もう一回！</button>
+</div>
+
+<div id="diffOverlay">
+  <div id="diffTitle">🪲 相手の強さを選ぼう</div>
+  <div class="diff-buttons">
+    <button class="diffBtn" data-level="1">🐣 よわい</button>
+    <button class="diffBtn" data-level="2">⚔️ ふつう</button>
+    <button class="diffBtn" data-level="3">🔥 つよい</button>
+    <button class="diffBtn" data-level="4">💀 最強</button>
+  </div>
+</div>
+
+<div id="loading">
+  <div>🪲 読み込み中...</div>
+  <div id="loadingPercent" style="font-size: 16px; margin-top: 10px;">0%</div>
+</div>
+
+<div id="debugPanel"></div>
+
+<div id="touchControls">
+  <div class="dpad-container">
+    <div class="dpad-bg"></div>
+    <div id="dpad-up" class="dpad-button">⬆️</div>
+    <div id="dpad-down" class="dpad-button">⬇️</div>
+    <div id="dpad-left" class="dpad-button">⬅️</div>
+    <div id="dpad-right" class="dpad-button">➡️</div>
+  </div>
+  <div class="button-container">
+    <div class="mini-buttons">
+      <button id="lockonBtn" class="mini-btn">🎯<span>注目</span></button>
+    </div>
+    <button id="guardBtn" class="guard-btn">🛡<span>ガード</span></button>
+    <button id="pushBtn" class="push-btn">👊<span>プッシュ</span></button>
+    <div id="atkStick">
+      <div id="atkStickBase"></div>
+      <div id="atkStickKnob">🦾</div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ========== デバッグ ==========
+// デバッグパネルは最新30件のみ保持。Bキーで表示/非表示切替
+let debugMode = true;
+const debugPanel = document.getElementById('debugPanel');
+const debugLogs = [];
+function addDebugLog(msg) {
+  const t = new Date().toLocaleTimeString();
+  debugLogs.push(`[${t}] ${msg}`);
+  if (debugLogs.length > 30) debugLogs.shift();
+  // 非表示時はDOM更新をスキップ
+  if (debugPanel.classList.contains('show')) {
+    debugPanel.textContent = debugLogs.join('\n');
+    debugPanel.scrollTop = debugPanel.scrollHeight;
+  }
+}
+debugPanel.classList.add('show');
+window.addEventListener('keydown', e => {
+  if (e.code === 'KeyB') {
+    debugPanel.classList.toggle('show');
+    if (debugPanel.classList.contains('show')) {
+      debugPanel.textContent = debugLogs.join('\n');
+    }
+  }
+});
+addDebugLog('🟢 起動');
+
+// ========== シーン ==========
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x223322);
+scene.fog = new THREE.Fog(0x223322, 40, 100);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 10, 18);
+camera.lookAt(0, 0, 0);
+
+// ★低スペックPC向け軽量化：AAオフ・ピクセル比1固定・シャドウは基本タイプ
+const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(1); // High-DPI画面でも1固定（描画ピクセル数を半減以下に）
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // 映画的な階調＝リアルさの土台
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap; // ギザギザ影→少し滑らか(Softほど重くない)
+document.body.appendChild(renderer.domElement);
+
+// ★環境マップ：甲虫特有の「艶・映り込み」を出す（1回生成するだけなので軽い）
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.5);
+sun.position.set(15, 20, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 1024; // 2048→1024で描画コスト1/4
+sun.shadow.mapSize.height = 1024;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 60;
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+scene.add(sun);
+
+// リムライト：斜め後ろからの青白い逆光で甲虫の輪郭をキラッとさせる
+const rim = new THREE.DirectionalLight(0xaaccff, 0.6);
+rim.position.set(-10, 12, -15);
+scene.add(rim);
+
+// ========== 切り株シーン ==========
+const STUMP_RADIUS = 11;  // 戦闘可能な半径(狭め＝場外の緊張感)
+const STUMP_HEIGHT = 4;   // 切り株の厚み
+
+// 遠い森の地面（切り株のはるか下）
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({ color: 0x1a0f05, roughness: 1.0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.position.y = -STUMP_HEIGHT - 0.5;
+scene.add(ground);
+
+// 切り株の側面（樹皮、下に向かって少し広がる）
+const stumpSide = new THREE.Mesh(
+  new THREE.CylinderGeometry(STUMP_RADIUS, STUMP_RADIUS + 1.2, STUMP_HEIGHT, 48),
+  new THREE.MeshStandardMaterial({ color: 0x5a3820, roughness: 0.95 })
+);
+stumpSide.position.y = -STUMP_HEIGHT / 2 + 0.01;
+stumpSide.receiveShadow = true;
+stumpSide.castShadow = true;
+scene.add(stumpSide);
+
+// 切り株の上面（明るめの木の色）
+const stumpTop = new THREE.Mesh(
+  new THREE.CircleGeometry(STUMP_RADIUS, 48),
+  new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.9 })
+);
+stumpTop.rotation.x = -Math.PI / 2;
+stumpTop.position.y = 0.02;
+stumpTop.receiveShadow = true;
+scene.add(stumpTop);
+
+// 年輪（濃い色の同心リング×4本）
+for (let i = 1; i <= 4; i++) {
+  const r = STUMP_RADIUS * (i * 0.22);
+  const veinRing = new THREE.Mesh(
+    new THREE.RingGeometry(r - 0.12, r + 0.12, 48),
+    new THREE.MeshBasicMaterial({ color: 0x5a3820, side: THREE.DoubleSide, transparent: true, opacity: 0.6 })
+  );
+  veinRing.rotation.x = -Math.PI / 2;
+  veinRing.position.y = 0.03;
+  scene.add(veinRing);
+}
+
+// バトルエリアの外周ライン（切り株の縁ちょい内側、警告色）
+const ring = new THREE.Mesh(
+  new THREE.RingGeometry(STUMP_RADIUS - 0.5, STUMP_RADIUS - 0.05, 64),
+  new THREE.MeshBasicMaterial({ color: 0xffaa44, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+);
+ring.rotation.x = -Math.PI / 2;
+ring.position.y = 0.04;
+scene.add(ring);
+
+// 森の雰囲気：軽い霧
+scene.fog = new THREE.Fog(0x1a1512, 30, 80);
+
+// ========== プレイヤー・相手 ==========
+const loader = new GLTFLoader();
+let player = null, enemy = null;          // Object3D
+let playerMixer = null, enemyMixer = null;
+const pActions = {}, eActions = {};       // 名前→AnimationAction
+let pCurrent = null, eCurrent = null;
+let walkAnimName = null, attackAnimName = null, reactAnimName = null, strafeAnimName = null, idleReady = false;
+
+// 全身当たり判定用ボーン（頭・胸・腹・大顎・脚6本の腿節と足先）
+// 腿節(femur)も入れることで、脚全体(付け根近く〜先端)どこに触れても命中する
+const HITBOX_BONES = ['Head', 'Thorax', 'Abdomen', 'Mandible_L', 'Mandible_R',
+  'Leg_F_L_coxa', 'Leg_F_R_coxa', 'Leg_M_L_coxa', 'Leg_M_R_coxa',
+  'Leg_B_L_coxa', 'Leg_B_R_coxa',
+  'Leg_F_L_femur', 'Leg_F_R_femur', 'Leg_M_L_femur', 'Leg_M_R_femur',
+  'Leg_B_L_femur', 'Leg_B_R_femur',
+  'Leg_F_L_tarsus', 'Leg_F_R_tarsus', 'Leg_M_L_tarsus', 'Leg_M_R_tarsus',
+  'Leg_B_L_tarsus', 'Leg_B_R_tarsus'];
+const BITE_BONES = ['Mandible_L', 'Mandible_R']; // 噛みつく側の判定に使うボーン
+let pBones = null, eBones = null; // ボーン名→Object3D のキャッシュ
+
+function cacheBones(root) {
+  const map = {};
+  for (const name of HITBOX_BONES) map[name] = root.getObjectByName(name);
+  return map;
+}
+
+// 攻撃側の大顎中点(口の中心)と、防御側の全身ボーンとの最短距離＆部位を返す
+// 前回「先端寄りに1.2オフセット」試したがボーンY軸方向の解釈がズレて悪化したため
+// シンプルにボーン根元(getWorldPosition)方式に戻す。距離しきい値を代わりに緩和
+const _hitV1 = new THREE.Vector3(), _hitV2 = new THREE.Vector3(), _hitCenter = new THREE.Vector3();
+function findClosestHit(attackerBonesMap, attackerBoneNames, defenderBonesMap) {
+  // 噛みつき点＝攻撃側ボーンの世界座標重心
+  _hitCenter.set(0, 0, 0);
+  let count = 0;
+  for (const an of attackerBoneNames) {
+    const ab = attackerBonesMap[an];
+    if (!ab) continue;
+    ab.getWorldPosition(_hitV1);
+    _hitCenter.add(_hitV1);
+    count++;
+  }
+  if (count === 0) return { dist: Infinity, part: null };
+  _hitCenter.divideScalar(count);
+
+  // 噛みつき点に最も近いP2の部位を探す
+  let minDist = Infinity, part = null;
+  for (const dn of HITBOX_BONES) {
+    const db = defenderBonesMap[dn];
+    if (!db) continue;
+    db.getWorldPosition(_hitV2);
+    const d = _hitCenter.distanceTo(_hitV2);
+    if (d < minDist) { minDist = d; part = dn; }
+  }
+  return { dist: minDist, part };
+}
+
+// ====== 全身のソリッド当たり判定（貫通防止） ======
+// 各ボーンに球コライダーを設定。P1とP2の球が重なったらP1を押し戻す
+const BODY_COLLIDERS = [
+  // ---- 体幹（各3球） ----
+  // Head(bone長1.3): 根元/中央/先端(=大顎付け根)
+  { bone: 'Head',       radius: 0.55 },
+  { bone: 'Head',       radius: 0.55, localOffset: [0, 0.65, 0] },
+  { bone: 'Head',       radius: 0.40, localOffset: [0, 1.20, 0] },
+  // Thorax(bone長1.4): 後端/中央(最も広い)/前端
+  { bone: 'Thorax',     radius: 0.75 },
+  { bone: 'Thorax',     radius: 0.85, localOffset: [0, 0.70, 0] },
+  { bone: 'Thorax',     radius: 0.65, localOffset: [0, 1.30, 0] },
+  // Abdomen(bone長1.3): 前端/中央(翅で最も広い)/後端
+  { bone: 'Abdomen',    radius: 0.85 },
+  { bone: 'Abdomen',    radius: 0.95, localOffset: [0, 0.65, 0] },
+  { bone: 'Abdomen',    radius: 0.70, localOffset: [0, 1.20, 0] },
+  // ---- 大顎（各4球, 現状維持） ----
+  { bone: 'Mandible_L', radius: 0.35 },
+  { bone: 'Mandible_L', radius: 0.30, localOffset: [0, 0.55, 0] },
+  { bone: 'Mandible_L', radius: 0.25, localOffset: [0, 1.10, 0] },
+  { bone: 'Mandible_L', radius: 0.22, localOffset: [0, 1.50, 0] },
+  { bone: 'Mandible_R', radius: 0.35 },
+  { bone: 'Mandible_R', radius: 0.30, localOffset: [0, 0.55, 0] },
+  { bone: 'Mandible_R', radius: 0.25, localOffset: [0, 1.10, 0] },
+  { bone: 'Mandible_R', radius: 0.22, localOffset: [0, 1.50, 0] },
+  // ---- 前脚 (coxa 1, femur 2, tarsus 3) ----
+  { bone: 'Leg_F_L_coxa',   radius: 0.30 },
+  { bone: 'Leg_F_L_femur',  radius: 0.25 },
+  { bone: 'Leg_F_L_femur',  radius: 0.22, localOffset: [0, 0.65, 0] },
+  { bone: 'Leg_F_L_tarsus', radius: 0.20 },
+  { bone: 'Leg_F_L_tarsus', radius: 0.18, localOffset: [0, 0.40, 0] },
+  { bone: 'Leg_F_L_tarsus', radius: 0.16, localOffset: [0, 0.75, 0] },
+  { bone: 'Leg_F_R_coxa',   radius: 0.30 },
+  { bone: 'Leg_F_R_femur',  radius: 0.25 },
+  { bone: 'Leg_F_R_femur',  radius: 0.22, localOffset: [0, 0.65, 0] },
+  { bone: 'Leg_F_R_tarsus', radius: 0.20 },
+  { bone: 'Leg_F_R_tarsus', radius: 0.18, localOffset: [0, 0.40, 0] },
+  { bone: 'Leg_F_R_tarsus', radius: 0.16, localOffset: [0, 0.75, 0] },
+  // ---- 中脚 (coxa 1, femur 2, tarsus 3) ----
+  { bone: 'Leg_M_L_coxa',   radius: 0.30 },
+  { bone: 'Leg_M_L_femur',  radius: 0.25 },
+  { bone: 'Leg_M_L_femur',  radius: 0.22, localOffset: [0, 0.70, 0] },
+  { bone: 'Leg_M_L_tarsus', radius: 0.20 },
+  { bone: 'Leg_M_L_tarsus', radius: 0.18, localOffset: [0, 0.45, 0] },
+  { bone: 'Leg_M_L_tarsus', radius: 0.16, localOffset: [0, 0.85, 0] },
+  { bone: 'Leg_M_R_coxa',   radius: 0.30 },
+  { bone: 'Leg_M_R_femur',  radius: 0.25 },
+  { bone: 'Leg_M_R_femur',  radius: 0.22, localOffset: [0, 0.70, 0] },
+  { bone: 'Leg_M_R_tarsus', radius: 0.20 },
+  { bone: 'Leg_M_R_tarsus', radius: 0.18, localOffset: [0, 0.45, 0] },
+  { bone: 'Leg_M_R_tarsus', radius: 0.16, localOffset: [0, 0.85, 0] },
+  // ---- 後脚 (tarsusが長い1.24, 4球で細かく) ----
+  { bone: 'Leg_B_L_coxa',   radius: 0.30 },
+  { bone: 'Leg_B_L_femur',  radius: 0.25 },
+  { bone: 'Leg_B_L_femur',  radius: 0.22, localOffset: [0, 0.70, 0] },
+  { bone: 'Leg_B_L_tarsus', radius: 0.20 },
+  { bone: 'Leg_B_L_tarsus', radius: 0.18, localOffset: [0, 0.40, 0] },
+  { bone: 'Leg_B_L_tarsus', radius: 0.16, localOffset: [0, 0.80, 0] },
+  { bone: 'Leg_B_L_tarsus', radius: 0.14, localOffset: [0, 1.15, 0] },
+  { bone: 'Leg_B_R_coxa',   radius: 0.30 },
+  { bone: 'Leg_B_R_femur',  radius: 0.25 },
+  { bone: 'Leg_B_R_femur',  radius: 0.22, localOffset: [0, 0.70, 0] },
+  { bone: 'Leg_B_R_tarsus', radius: 0.20 },
+  { bone: 'Leg_B_R_tarsus', radius: 0.18, localOffset: [0, 0.40, 0] },
+  { bone: 'Leg_B_R_tarsus', radius: 0.16, localOffset: [0, 0.80, 0] },
+  { bone: 'Leg_B_R_tarsus', radius: 0.14, localOffset: [0, 1.15, 0] },
+];
+
+// ---- コライダー可視化 ----
+// 半透明の球でコライダーを表示。デフォルトON、Vキーで切替
+let showColliders = false; // デフォルトOFF（描画コスト削減）。Vキーで表示切替
+const colliderMeshes = { p1: [], p2: [] };
+function buildColliderMeshes() {
+  for (const c of BODY_COLLIDERS) {
+    const geom = new THREE.SphereGeometry(c.radius, 8, 6); // 16,12→8,6でポリゴン数1/4
+    // P1側=オレンジ、P2側=シアン
+    const mat1 = new THREE.MeshBasicMaterial({ color: 0xff9933, transparent: true, opacity: 0.35, depthWrite: false });
+    const mat2 = new THREE.MeshBasicMaterial({ color: 0x33ccff, transparent: true, opacity: 0.35, depthWrite: false });
+    const m1 = new THREE.Mesh(geom, mat1);
+    const m2 = new THREE.Mesh(geom.clone(), mat2);
+    m1.renderOrder = 999; m2.renderOrder = 999;
+    m1.visible = showColliders; m2.visible = showColliders; // デフォルトfalseなので最初は非表示
+    scene.add(m1); scene.add(m2);
+    colliderMeshes.p1.push({ mesh: m1, boneName: c.bone, localOffset: c.localOffset });
+    colliderMeshes.p2.push({ mesh: m2, boneName: c.bone, localOffset: c.localOffset });
+  }
+}
+function updateColliderMeshes() {
+  // 非表示時は座標計算もスキップ（低スペックPCで大きな効果）
+  if (!showColliders || !pBones || !eBones) return;
+  const tmp = new THREE.Vector3();
+  for (const v of colliderMeshes.p1) {
+    const b = pBones[v.boneName]; if (!b) continue;
+    if (v.localOffset) {
+      tmp.set(v.localOffset[0], v.localOffset[1], v.localOffset[2]);
+      tmp.applyMatrix4(b.matrixWorld);
+    } else {
+      b.getWorldPosition(tmp);
+    }
+    v.mesh.position.copy(tmp);
+  }
+  for (const v of colliderMeshes.p2) {
+    const b = eBones[v.boneName]; if (!b) continue;
+    if (v.localOffset) {
+      tmp.set(v.localOffset[0], v.localOffset[1], v.localOffset[2]);
+      tmp.applyMatrix4(b.matrixWorld);
+    } else {
+      b.getWorldPosition(tmp);
+    }
+    v.mesh.position.copy(tmp);
+  }
+}
+// Vキーで切替
+window.addEventListener('keydown', e => {
+  if (e.code === 'KeyV') {
+    showColliders = !showColliders;
+    // 全球のvisibleをこの瞬間だけ切替（毎フレーム設定より軽い）
+    for (const v of colliderMeshes.p1) v.mesh.visible = showColliders;
+    for (const v of colliderMeshes.p2) v.mesh.visible = showColliders;
+    addDebugLog(`👁️ コライダー表示: ${showColliders ? 'ON' : 'OFF'}`);
+  }
+});
+
+const _colP = new THREE.Vector3(), _colE = new THREE.Vector3();
+// 体幹の重心(頭・胸・腹の平均)の中心からの距離。半分以上が切り株に乗ってるかの判定用
+// (重心が縁の内側なら体の半分以上が乗ってる=落ちない)
+const _fallCenterV = new THREE.Vector3();
+const _bodyCoreBones = ['Head', 'Thorax', 'Abdomen'];
+function bodyCenterDist(bones, obj) {
+  let cx = 0, cz = 0, n = 0;
+  if (bones) {
+    for (let i = 0; i < _bodyCoreBones.length; i++) {
+      const b = bones[_bodyCoreBones[i]];
+      if (!b) continue;
+      b.getWorldPosition(_fallCenterV);
+      cx += _fallCenterV.x; cz += _fallCenterV.z; n++;
+    }
+  }
+  if (n === 0) return Math.hypot(obj.position.x, obj.position.z); // ボーン未取得時は従来通り
+  return Math.hypot(cx / n, cz / n);
+}
+// 軽量化用: コライダーのワールド座標キャッシュ(毎フレーム再生成しない)
+const _collP = [], _collE = [];
+let _collValid = null, _bodyIdx = null;
+function resolveBodyCollisions() {
+  if (!pBones || !eBones) return;
+  // 噛みつきモーション中(BITING)と、P2が飛ばされてる最中(REACTING)は物理無効＝アニメ優先。
+  // FREE/STANCE中は貫通防止を効かせる(構え中に相手に体当たりで押し込むのはOK、貫通はNG)
+  if (gameOver) return;
+  if (state === STATE.BITING || enemyState === ENEMY_STATE.REACTING || enemyState === ENEMY_STATE.GRIPPED) return;
+
+  // ★押し出し前の半径を記録。歩いて到達した位置(r0)は絶対に保ち、押し出しでそれ以上外へは出さない。
+  //   (自分で歩いて縁を越える=場外は上の縁チェックが先に発火するのでここには来ない)
+  const _pR0 = Math.hypot(player.position.x, player.position.z);
+  const _eR0 = Math.hypot(enemy.position.x, enemy.position.z);
+
+  // ★軽量化: コライダーのワールド座標を毎反復まとめて計算(getWorldPositionの多重呼び出しを回避)
+  const N = BODY_COLLIDERS.length;
+  if (_collP.length === 0) {
+    for (let i = 0; i < N; i++) { _collP.push(new THREE.Vector3()); _collE.push(new THREE.Vector3()); }
+  }
+  // ★体幹+大顎のコライダーだけ使う(脚38個は除外=約10倍軽い。脚が薄く重なるのは見た目ほぼ影響なし)
+  if (!_bodyIdx) {
+    const bodyBones = { Head: 1, Thorax: 1, Abdomen: 1, Mandible_L: 1, Mandible_R: 1 };
+    _bodyIdx = [];
+    for (let i = 0; i < N; i++) {
+      const bn = BODY_COLLIDERS[i].bone;
+      if (bodyBones[bn] && pBones[bn] && eBones[bn]) _bodyIdx.push(i);
+    }
+  }
+  const M = _bodyIdx.length;
+  // ★ブロードフェーズ: 中心が十分離れていれば貫通なし=重い判定を丸ごとスキップ
+  const _cdx = player.position.x - enemy.position.x, _cdz = player.position.z - enemy.position.z;
+  if (_cdx * _cdx + _cdz * _cdz > 49) return; // 中心7以上離れていたらスキップ
+  for (let iter = 0; iter < 2; iter++) {
+    player.updateMatrixWorld(true);
+    enemy.updateMatrixWorld(true);
+    for (let k = 0; k < M; k++) {
+      const i = _bodyIdx[k];
+      const c = BODY_COLLIDERS[i];
+      const pb = pBones[c.bone], eb = eBones[c.bone];
+      const pv = _collP[i], ev = _collE[i];
+      if (c.localOffset) {
+        pv.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(pb.matrixWorld);
+        ev.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(eb.matrixWorld);
+      } else {
+        pv.setFromMatrixPosition(pb.matrixWorld);
+        ev.setFromMatrixPosition(eb.matrixWorld);
+      }
+    }
+    let moved = false;
+    for (let k = 0; k < M; k++) {
+      const i = _bodyIdx[k];
+      const pv = _collP[i], pr = BODY_COLLIDERS[i].radius;
+      for (let l = 0; l < M; l++) {
+        const j = _bodyIdx[l];
+        const ev = _collE[j];
+        const minDist = pr + BODY_COLLIDERS[j].radius;
+        const dx = pv.x - ev.x, dz = pv.z - ev.z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq < minDist * minDist && distSq > 1e-4) {
+          const dist = Math.sqrt(distSq);
+          const push = (minDist - dist) * 0.5; // 半々に押し合う
+          const ux = dx / dist, uz = dz / dist;
+          player.position.x += ux * push; player.position.z += uz * push;
+          enemy.position.x -= ux * push; enemy.position.z -= uz * push;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  // ★体当たり(貫通防止)だけでは場外へ出さない。ただし歩いて到達した位置(r0)は保つ。
+  //   lim = max(r0, 縁の少し内側)。押し出しでr0より外へは出さないが、自分の移動は妨げない。
+  //   → これで「縁で動けなくなる」不具合を解消しつつ、体当たり場外も防ぐ。
+  const _capEdge = (obj, r0) => {
+    const d = Math.hypot(obj.position.x, obj.position.z);
+    const lim = Math.max(r0, STUMP_RADIUS - 0.1);
+    if (d > lim && d > 0.0001) {
+      obj.position.x *= lim / d;
+      obj.position.z *= lim / d;
+    }
+  };
+  _capEdge(player, _pR0);
+  _capEdge(enemy, _eR0);
+}
+
+// プレイヤー本来の「前(大顎側)」方向。読み込み直後に実座標から自動算出する
+let localForward = new THREE.Vector3(0, 0, -1);
+// 追加：毎フレームのVector3生成をなくすための使い回し用バッファ(clone()のゴミ削減)
+const _vecPool = {
+  fwd: new THREE.Vector3(), _eF: new THREE.Vector3(), _fwd: new THREE.Vector3(),
+  fwdV: new THREE.Vector3(), pf: new THREE.Vector3(), pf2: new THREE.Vector3(),
+  back: new THREE.Vector3(), _back: new THREE.Vector3(), pb: new THREE.Vector3(),
+  eb: new THREE.Vector3(), _p1f: new THREE.Vector3(), _p2f: new THREE.Vector3(),
+  _p1Fwd: new THREE.Vector3(), _dF: new THREE.Vector3(), eFwd: new THREE.Vector3(),
+  eFwd2: new THREE.Vector3(), eFwdC: new THREE.Vector3(), eF: new THREE.Vector3(),
+  thDir: new THREE.Vector3(), ef: new THREE.Vector3(), eback: new THREE.Vector3(),
+  backOffset: new THREE.Vector3(), lookAhead: new THREE.Vector3(),
+};
+const enemyRestPoses = {}; // ロード時に保存するP2ボーンのレストポーズ
+// --- 正面激突演出用 ---
+let hitStopTime = 0;      // ヒットストップ残り時間(秒)。>0の間はmixerを更新しない
+let shakeTime = 0;         // カメラシェイク残り時間(秒)
+let shakeIntensity = 0;    // 現在のシェイクの強さ
+// --- ガード & ロックオン ---
+let guardHeld = false;    // Shiftキーガード中
+let lockOnActive = true;  // Qトグルロックオン(デフォルトON=常に相手を向く)
+let lockOnResumeAfterCarry = false; // 掴みで自動解除したロックオンを投げ後に復帰させるフラグ
+let attackMode = 'grab';  // 'grab'=前方投げ / 'blowaway'=斜め後方に高く投げる
+let attackPower = 1.0;    // 攻撃スティックの引き量に応じた威力(0〜1)。吹き飛ばしに反映(掴みは常に通常)
+let fWasDown = false;     // Fキーの前フレーム状態(release検出用)
+let shiftWasDown = false; // Shiftの前フレーム状態(ガードキャンセルのエッジ検出用)
+// --- スタミナシステム ---
+const MAX_STAMINA = 100;
+let stamina = MAX_STAMINA;
+// --- スタン(スタミナ切れ) ---
+let stunTimer = 0;               // プレイヤーのスタン残り時間
+const STUN_DURATION = 1.8;       // スタン継続(秒)=無防備
+const STAM_REGEN_STUN = 45;      // /秒 スタン中の回復(復帰後は動ける)
+// --- 敵スタミナ&スタン(公平のため敵にもスタミナ) ---
+let enemyStamina = MAX_STAMINA;
+let enemyLocoSpeed = 0;          // 敵の実移動速度(脚アニメ連動=滑り防止)
+const _ePrevPos = new THREE.Vector3();
+let aiStunned = false, aiStunTimer = 0;
+let aiPushPower = 0.5;            // 敵プッシュの威力(チャージ相当。激突の判定勝ちに使う)
+// --- 掴み被り=組み合い(鍔迫り合い) ---
+let grappleActive = false, grappleTimer = 0, grappleSparkTimer = 0;
+const grappleMid = new THREE.Vector3();
+const grappleDir = new THREE.Vector3();
+const GRAPPLE_DURATION = 1.2;    // 組み合いの長さ(秒)
+const STAM_REGEN         = 20;   // /秒 通常回復
+const STAM_DRAIN_CHARGE  = 25;   // /秒 突進中
+const STAM_DRAIN_STANCE  = 5;    // /秒 構え中
+const STAM_DRAIN_GUARD   = 3;    // /秒 ガード中(軽め=気軽に構えられる)
+const STAM_DRAIN_CARRY   = 35;   // /秒 運搬中(重い=長く運べない、早く投げる駆け引き)
+const STAM_COST_GRAB     = 25;   // 掴み1回
+const STAM_COST_BLOWAWAY = 40;   // 吹き飛ばし1回
+const STAM_MIN_GRAB      = 25;   // 掴み発動最低値
+const STAM_MIN_BLOWAWAY  = 40;   // 吹き飛ばし発動最低値
+// --- プッシュ(三すくみの一角) ---
+let pushTimer = 0;            // プッシュ動作の経過(秒)
+let pushResolved = false;     // このプッシュで既に接触判定したか
+const PUSH_DURATION = 0.45;   // プッシュ全体の時間
+const PUSH_ACTIVE_START = 0.08; // 押し出し判定が出る開始(秒)
+const PUSH_ACTIVE_END = 0.25;   // 押し出し判定が消える(秒)
+const PUSH_LUNGE_SPEED = 6.0; // プッシュ中の前進速度
+const PUSH_RANGE = 3.2;       // プッシュが届く距離
+const E_PUSH_START = 0.30;    // ★敵プッシュの前兆(この間 黄色く光る=ガード/かわしの猶予)。人間の反応に合わせる
+const E_PUSH_END = 0.50;      // 敵プッシュが当たる窓の終わり
+const E_PUSH_DURATION = 0.70; // 敵プッシュ全体
+const STAM_COST_PUSH = 18;    // プッシュのスタミナ消費(溜め開始時)
+// --- プッシュ長押しチャージ ---
+let pushChargeTime = 0;       // 溜め経過(秒)
+let pushPower = 0;            // 0〜1 溜め威力
+let pushGlowOn = false;       // 赤グロー中フラグ
+const PUSH_MAX_CHARGE = 1.1;  // これで威力MAX(秒)
+const PUSH_MIN_POWER = 0.25;  // 押した瞬間の最低威力
+const STAM_DRAIN_PUSH_CHARGE = 8; // /秒 溜め維持コスト(長すぎ防止)
+let eWasDown = false;         // Eキーのrelease検出
+// --- 攻撃ジョイスティック ---
+let joyActive = false;         // スティックに指が乗ってる
+let joyPullRatio = 0;          // 0-1 引き量
+let joyDirection = null;       // 'up'(吹き飛ばし) | 'down'(掴み)
+let joyStanceActive = false;   // スティック起点の構え中フラグ
+let joyReleasedThisFrame = false; // 離した瞬間(ゲームループで消費)
+let joyReleasePull = 0;        // 離した瞬間の引き量
+let joyThrowRequest = false;   // CARRYING中のスティック操作で投げ
+let joyVecX = 0, joyVecY = 0;           // スティック現在ベクトル(-1..1, 画面座標)
+let joyThrowVecX = 0, joyThrowVecY = 0; // 投げ方向指定(離した瞬間のベクトル)
+let carryRotOffset = 0;        // 掴んだ瞬間のP1とP2の相対角度(運搬中の剛体回転用)
+let enemyAttackActive = false; // P2が攻撃モーション中か(AI実装後に使用。相殺判定用)
+// --- リングアウト勝敗 ---
+let gameOver = false;
+let fallingObj = null;  // 落下中のObject3D
+let fallVelY = 0;       // 落下速度
+function triggerFall(obj, isPlayerFalling) {
+  if (gameOver) return;
+  gameOver = true;
+  fallingObj = obj;
+  addDebugLog(isPlayerFalling ? '💀 場外に落ちた…' : '🏆 相手を場外に落とした！');
+  setStatus(isPlayerFalling ? '💀 場外！' : '🏆 リングアウト！', true);
+  setTimeout(() => showResult(isPlayerFalling ? '💀 場外負け…' : '🏆 勝利！！', !isPlayerFalling), 1000);
+}
+function showResult(text, won) {
+  const ov = document.getElementById('resultOverlay');
+  const tx = document.getElementById('resultText');
+  if (tx) {
+    tx.textContent = text;
+    tx.classList.toggle('win', won);
+    tx.classList.toggle('lose', !won);
+  }
+  if (ov) ov.classList.add('show');
+}
+const restartBtnEl = document.getElementById('restartBtn');
+if (restartBtnEl) restartBtnEl.addEventListener('click', () => location.reload());
+
+// ========== 敵AI ==========
+let aiLevel = 0;      // 0=未選択(AI停止)
+let aiPreset = null;
+const AI_PRESETS = {
+  //                                                                                              readChance=読み成功率  reactDelay=反応時間(秒,短いほど速い)  patience=間合い重視度(0-1)
+  1: { moveSpeed: 3.8, turnRate: 3.0, decideEvery: 0.7,  attackChance: 0.55, attackRange: 4.0, kb: 5.5, atkSpeed: 1.0,  chargeSpeed: 4.5, punish: true,  readChance: 0.55, reactDelay: 0.30, patience: 0.35 },
+  2: { moveSpeed: 5.8, turnRate: 4.6, decideEvery: 0.34, attackChance: 0.80, attackRange: 5.0, kb: 7.0, atkSpeed: 1.2,  chargeSpeed: 6.8, punish: true,  readChance: 0.80, reactDelay: 0.15, patience: 0.62 },
+  3: { moveSpeed: 7.6, turnRate: 7.2, decideEvery: 0.15, attackChance: 1.00, attackRange: 5.9, kb: 9.0, atkSpeed: 1.5,  chargeSpeed: 9.4, punish: true,  readChance: 0.98, reactDelay: 0.05, patience: 0.90 },
+  4: { moveSpeed: 9.2, turnRate: 12.0, decideEvery: 0.08, attackChance: 1.00, attackRange: 6.4, kb: 12.0, atkSpeed: 1.9, chargeSpeed: 11.5, punish: true,  readChance: 1.00, reactDelay: 0.02, patience: 0.96 },
+};
+let aiDecideTimer = 0;
+let aiBehavior = 'approach';   // approach / strafeL / strafeR / wait
+let aiAttacking = false;       // 敵が攻撃モーション中
+let aiBiteResolved = false;
+let aiAtkAction = null;
+let aiGuarding = false;         // 敵がガード中(三すくみ)
+let aiGuardTimer = 0;           // ガード継続時間
+let aiPushing = false;          // 敵がプッシュ中
+let aiPushTimer = 0;
+let aiPushResolved = false;
+// --- 読み合いAI用 ---
+let playerMoveHist = [];        // プレイヤーの直近の技('grab'/'push'/'guard')最大8個
+let aiPlayerIdleTime = 0;       // プレイヤーが最後に技を出してからの経過(秒)。長い=受け身
+let aiReactCounter = null;      // 反応カウンター { move:'push'/'grab'/'guard', timer }
+let aiPrevPlayerState = 'free'; // 前フレームのプレイヤー状態(技の出始めを検出)
+function recordPlayerMove(m) {
+  playerMoveHist.push(m);
+  if (playerMoveHist.length > 8) playerMoveHist.shift();
+  aiPlayerIdleTime = 0;
+}
+// プレイヤー被弾(投げられ)
+let playerThrown = false;
+let pThrowStartPos = null, pThrowTargetPos = null, pThrowStartTime = 0;
+const playerRestPoses = {};
+
+function cancelEnemyAttack() {
+  if (aiAtkAction) {
+    aiAtkAction.fadeOut(0.15);
+    aiAtkAction = null;
+  }
+  aiAttacking = false;
+  enemyAttackActive = false;
+  aiPushing = false;
+  aiPushResolved = false;
+  aiGuarding = false;
+  aiReactCounter = null;
+}
+function stunPlayer(dur) {
+  if (state === STATE.STUN) return;
+  state = STATE.STUN;
+  stunTimer = dur || STUN_DURATION;
+  guardHeld = false;
+  playerVelX = 0; playerVelZ = 0;
+  if (pCurrent) pCurrent.fadeOut(0.15);
+  addDebugLog('💫 プレイヤースタン');
+  setStatus('💫 スタン！無防備！', true);
+}
+function stunEnemy(dur) {
+  if (aiStunned) return;
+  aiStunned = true;
+  aiStunTimer = dur || STUN_DURATION;
+  cancelEnemyAttack();
+  if (eCurrent) eCurrent.fadeOut(0.15);
+  addDebugLog('💫 敵スタン');
+  setStatus('💫 相手がスタン！攻めるチャンス！', true);
+}
+function faceDir(obj, dx, dz) {
+  const fwd = _vecPool.fwd.copy(localForward).applyQuaternion(obj.quaternion);
+  const cur = Math.atan2(fwd.x, fwd.z);
+  const tgt = Math.atan2(dx, dz);
+  let diff = tgt - cur;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  obj.rotation.y += diff * 0.4; // 強めに向かい合わせる
+}
+function startGrapple() {
+  if (grappleActive || gameOver || !player || !enemy) return;
+  grappleActive = true;
+  grappleTimer = GRAPPLE_DURATION;
+  grappleSparkTimer = 0;
+  grappleMid.copy(player.position).add(enemy.position).multiplyScalar(0.5);
+  grappleDir.subVectors(enemy.position, player.position).setY(0);
+  if (grappleDir.lengthSq() < 1e-4) grappleDir.set(0, 0, 1);
+  grappleDir.normalize();
+  state = STATE.FREE;
+  joyStanceActive = false;
+  cancelEnemyAttack();
+  playerVelX = 0; playerVelZ = 0;
+  // 歩行アニメを止める(組み合い中は脚を踏ん張る)
+  [walkAnimName, strafeAnimName].forEach(n => {
+    if (n && pActions[n] && pActions[n].isRunning()) pActions[n].fadeOut(0.1);
+    if (n && eActions[n] && eActions[n].isRunning()) eActions[n].fadeOut(0.1);
+  });
+  // 大顎を開いたポーズ(攻撃アニメを開きフレームで停止)
+  const pa = pActions[attackAnimName];
+  if (pa) { pa.reset().setLoop(THREE.LoopOnce).play(); pa.time = STANCE_HOLD_TIME; pa.paused = true; pCurrent = pa; }
+  const ea = eActions[attackAnimName];
+  if (ea) { ea.reset().setLoop(THREE.LoopOnce).play(); ea.time = STANCE_HOLD_TIME; ea.paused = true; eCurrent = ea; }
+  hitStopTime = 0.1;
+  shakeTime = GRAPPLE_DURATION; shakeIntensity = 0.14;
+  setStatus('⚔ 組み合い！大顎の押し合い！', true);
+  addDebugLog('🤼 掴み被り→組み合い開始');
+}
+function startEnemyAttack() {
+  aiAttacking = true;
+  aiBiteResolved = false;
+  enemyAttackActive = false;
+  enemyStamina -= 22; // 攻撃の消耗
+  if (enemyStamina <= 0) { enemyStamina = 0; }
+  const a = eActions[attackAnimName];
+  if (a) {
+    if (eCurrent) eCurrent.fadeOut(0.1);
+    a.reset().setLoop(THREE.LoopOnce).setEffectiveTimeScale(aiPreset.atkSpeed).fadeIn(0.1).play();
+    a.clampWhenFinished = true;
+    eCurrent = a;
+    aiAtkAction = a;
+  }
+  addDebugLog('🤖 敵の攻撃！');
+}
+
+// 難易度選択
+document.querySelectorAll('.diffBtn').forEach(btn => {
+  const startGame = (e) => {
+    e.preventDefault();
+    aiLevel = parseInt(btn.dataset.level, 10);
+    aiPreset = AI_PRESETS[aiLevel];
+    const ov = document.getElementById('diffOverlay');
+    if (ov) ov.classList.add('hide');
+    addDebugLog(`🤖 AIレベル${aiLevel}で開始！`);
+  };
+  btn.addEventListener('click', startGame);
+  btn.addEventListener('touchstart', startGame);
+});
+// ===== クラッシュ衝突エフェクト(クワガタ同士の間に出る火花+衝撃リング) =====
+const clashEffects = [];
+let _sparkTex = null;
+function getSparkTexture() {
+  if (_sparkTex) return _sparkTex;
+  const S = 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.3, 'rgba(255,240,150,0.9)');
+  g.addColorStop(0.6, 'rgba(255,150,40,0.5)');
+  g.addColorStop(1, 'rgba(255,100,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  _sparkTex = new THREE.CanvasTexture(cv);
+  return _sparkTex;
+}
+function spawnClashBurst(pos) {
+  const tex = getSparkTexture();
+  // 中央フラッシュ
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+  flash.position.copy(pos); flash.scale.setScalar(0.6); scene.add(flash);
+  clashEffects.push({ obj: flash, age: 0, maxAge: 0.3, type: 'flash' });
+  // 火花(外側に飛び散る)
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: 0xffd257, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.position.copy(pos); s.scale.setScalar(0.32); scene.add(s);
+    const ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
+    const spd = 3.5 + Math.random() * 3.5;
+    clashEffects.push({ obj: s, age: 0, maxAge: 0.42, type: 'spark', vx: Math.cos(ang) * spd, vz: Math.sin(ang) * spd, vy: 1.5 + Math.random() * 3.5 });
+  }
+  // 拡大する衝撃リング(カメラの方を向くビルボード)
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.2, 0.42, 24),
+    new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  ring.position.copy(pos); scene.add(ring);
+  clashEffects.push({ obj: ring, age: 0, maxAge: 0.33, type: 'ring' });
+}
+function updateClashEffects(dt) {
+  for (let i = clashEffects.length - 1; i >= 0; i--) {
+    const e = clashEffects[i];
+    e.age += dt;
+    const t = e.age / e.maxAge;
+    if (t >= 1) {
+      scene.remove(e.obj);
+      if (e.obj.material) e.obj.material.dispose();
+      if (e.obj.geometry) e.obj.geometry.dispose();
+      clashEffects.splice(i, 1);
+      continue;
+    }
+    if (e.type === 'flash') {
+      e.obj.scale.setScalar(0.6 + t * 3.2);
+      e.obj.material.opacity = 1 - t;
+    } else if (e.type === 'spark') {
+      e.obj.position.x += e.vx * dt;
+      e.obj.position.y += e.vy * dt;
+      e.obj.position.z += e.vz * dt;
+      e.vy -= 9 * dt; // 重力で落ちる
+      e.obj.scale.setScalar(0.32 * (1 - t * 0.6));
+      e.obj.material.opacity = 1 - t;
+    } else if (e.type === 'ring') {
+      e.obj.lookAt(camera.position);
+      e.obj.scale.setScalar(1 + t * 4.5);
+      e.obj.material.opacity = 0.9 * (1 - t);
+    }
+  }
+}
+function triggerClashEffect() {
+  // 1. ヒットストップ
+  hitStopTime = 0.15;
+  // 2. カメラシェイク
+  shakeTime = 0.4;
+  shakeIntensity = 0.35;
+  // 3. 画面フラッシュ(軽く)
+  const flash = document.getElementById('clashFlash');
+  if (flash) {
+    flash.classList.add('active');
+    setTimeout(() => flash.classList.remove('active'), 200);
+  }
+  // 4. ★クワガタ同士の間に3D衝突エフェクト(火花+衝撃リング)。文字演出は廃止
+  if (player && enemy) {
+    const mid = player.position.clone().add(enemy.position).multiplyScalar(0.5);
+    mid.y = 1.2;
+    spawnClashBurst(mid);
+  }
+  addDebugLog('⚔ 衝突エフェクト発動！');
+}
+function computeLocalForward(root, bonesMap) {
+  const rear = bonesMap['Abdomen'];
+  const mL = bonesMap['Mandible_L'];
+  const mR = bonesMap['Mandible_R'];
+  if (!rear || !mL || !mR) return;
+  const rearW = new THREE.Vector3(); rear.getWorldPosition(rearW);
+  const mLW = new THREE.Vector3(); mL.getWorldPosition(mLW);
+  const mRW = new THREE.Vector3(); mR.getWorldPosition(mRW);
+  const frontW = mLW.add(mRW).multiplyScalar(0.5); // 大顎の中点（腹→大顎で体の前後軸を取る）
+  const worldDir = frontW.clone().sub(rearW);
+  worldDir.y = 0;
+  if (worldDir.lengthSq() < 0.0001) return;
+  worldDir.normalize();
+  // ワールド向きを、読み込み直後のクォータニオンで逆回転してローカル向きに戻す
+  const invQuat = root.quaternion.clone().invert();
+  const localDir = worldDir.applyQuaternion(invQuat);
+  localDir.y = 0;
+  if (localDir.lengthSq() < 0.0001) return;
+  localDir.normalize();
+  localForward.copy(localDir);
+}
+
+// ★点刻(puncture)ノーマルマップを手続き生成
+//   実物のホソアカ外骨格は「finely punctured」＝表面に無数の微細な窪み。
+//   これをノーマルマップで作ると、光が当たった時に無数の小さなハイライトが散って
+//   「のっぺり」から「本物の殻」に化ける。テクスチャ画像不要でファイルも増えない。
+let _beetleNormalMap = null;
+function getBeetleNormalMap() {
+  if (_beetleNormalMap) return _beetleNormalMap;
+  const S = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  // ノーマルマップのベース色 = 平坦(128,128,255)
+  ctx.fillStyle = 'rgb(128,128,255)';
+  ctx.fillRect(0, 0, S, S);
+  // 点刻を大量に描く。各点は「窪み」なので中心が凹んで見えるようRGBを放射状に
+  const dots = 1400;
+  for (let i = 0; i < dots; i++) {
+    const x = Math.random() * S;
+    const y = Math.random() * S;
+    const r = 2 + Math.random() * 4;
+    // 窪みの左上は明るく(法線が左上向き)、右下は暗く(右下向き)＝擬似的な凹み
+    const g = ctx.createRadialGradient(x - r*0.3, y - r*0.3, 0, x, y, r);
+    g.addColorStop(0, 'rgba(150,150,255,0.9)');
+    g.addColorStop(0.5, 'rgba(128,128,255,0.4)');
+    g.addColorStop(1, 'rgba(105,105,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4); // 体に対して細かく繰り返す
+  _beetleNormalMap = tex;
+  return tex;
+}
+
+// 甲虫の外骨格マテリアル：構造色(玉虫)を持つ殻として物理的に作る
+//   - clearcoat: 表面のワックス層(ヌメッとした艶)
+//   - iridescence: 構造色。見る角度で色相がわずかに変わる(モルフォ蝶と同じ原理)
+//   - 点刻ノーマル: 微細な窪みで光を散らす
+function makeBeetleMaterial(src, tintHex) {
+  const mat = new THREE.MeshPhysicalMaterial({
+    map: src.map || null,
+    vertexColors: !!src.vertexColors,
+    color: new THREE.Color(tintHex),
+    metalness: 0.55,
+    roughness: 0.38,
+    normalMap: getBeetleNormalMap(),
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.22,
+    iridescence: 0.5,              // 構造色の強さ(控えめ=落ち着いた赤銅ベース)
+    iridescenceIOR: 1.9,
+    iridescenceThicknessRange: [120, 380], // 干渉膜の厚み範囲=出る色の幅
+    envMapIntensity: 1.0,
+    side: src.side,
+  });
+  return mat;
+}
+
+// ★微細な毛(setae)を生やす：実物のクワガタは脚・体の付け根に細かい剛毛が密生する。
+//   スキンメッシュ表面からサンプルした点に、法線方向へ短い毛をLineで生やす。
+//   軽量(数百本のライン)なので低スペックでも動く。毛は半透明の茶色で自然に馴染ませる。
+function addBeetleHair(rootObj, hairColor, count) {
+  const positions = [];
+  // メッシュの頂点をいくつか拾って毛の根元にする
+  const sampleVerts = [];
+  rootObj.traverse(o => {
+    if (o.isSkinnedMesh && o.geometry) {
+      const posAttr = o.geometry.attributes.position;
+      const normAttr = o.geometry.attributes.normal;
+      if (!posAttr) return;
+      const step = Math.max(1, Math.floor(posAttr.count / (count * 1.5)));
+      const meshMat = o.matrixWorld;
+      for (let i = 0; i < posAttr.count; i += step) {
+        const vx = posAttr.getX(i), vy = posAttr.getY(i), vz = posAttr.getZ(i);
+        let nx = 0, ny = 1, nz = 0;
+        if (normAttr) { nx = normAttr.getX(i); ny = normAttr.getY(i); nz = normAttr.getZ(i); }
+        sampleVerts.push({ vx, vy, vz, nx, ny, nz });
+      }
+    }
+  });
+  if (sampleVerts.length === 0) return null;
+  // ランダムにcount本選んで毛(根元→法線方向に伸ばした先端)を作る
+  for (let i = 0; i < count; i++) {
+    const s = sampleVerts[Math.floor(Math.random() * sampleVerts.length)];
+    const len = 0.12 + Math.random() * 0.18; // 毛の長さ(ローカル)
+    // 毛は法線方向 + 少しランダムに傾ける
+    const jx = (Math.random() - 0.5) * 0.4;
+    const jz = (Math.random() - 0.5) * 0.4;
+    positions.push(s.vx, s.vy, s.vz);
+    positions.push(
+      s.vx + (s.nx + jx) * len,
+      s.vy + (s.ny) * len,
+      s.vz + (s.nz + jz) * len
+    );
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const mat = new THREE.LineBasicMaterial({
+    color: hairColor, transparent: true, opacity: 0.55,
+  });
+  const hair = new THREE.LineSegments(geo, mat);
+  // rootObjのスキンメッシュにぶら下げると変形に追従しないので、
+  // ワールド座標そのままの静的な毛としてrootObjに追加(体の相対位置は保つ)
+  rootObj.add(hair);
+  return hair;
+}
+
+addDebugLog('GLB 読み込み開始');
+
+loader.load('stag_beetle.glb', (gltf) => {
+ try {
+  addDebugLog(`✅ GLB完了 / アニメ${gltf.animations.length}個`);
+
+  const animNames = gltf.animations.map(a => a.name);
+  const exact = (nm) => animNames.includes(nm) ? nm : null;
+  const find  = (kw) => animNames.find(n => n.includes(kw)) || null;
+  // 完全一致を優先（"Stag_Rig_P2..." のような紛らわしい部分一致を避けるため）
+  walkAnimName   = exact('Stag_Rigアクション') || find('Stag_Rig') || find('Walk') || animNames[0];
+  attackAnimName = exact('Attack_GrabThrow')   || find('Attack_Grab') || find('Attack');
+  reactAnimName  = exact('React_GrabThrow_P2') || find('React_GrabThrow') || find('React');
+  strafeAnimName = exact('Strafe_Walk') || find('Strafe') || null;
+  addDebugLog(`🚶歩行:${walkAnimName}`);
+  addDebugLog(`🦾攻撃:${attackAnimName}`);
+  addDebugLog(`💥被弾:${reactAnimName}`);
+  addDebugLog(`↔️横歩き:${strafeAnimName || 'なし'}`);
+
+  // ---- プレイヤー（P1）----
+  player = gltf.scene;
+  player.scale.set(0.5, 0.5, 0.5);
+  player.position.set(0, 0, 8);
+  player.rotation.y = Math.PI; // 相手（奥）を向く
+  // GLB内の余分なメッシュ(ICO球/ThrowBall等)を先に除外
+  const junkMeshes = [];
+  player.traverse(o => {
+    if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh) {
+      junkMeshes.push(o);
+    }
+  });
+  for (const m of junkMeshes) { if (m.parent) m.parent.remove(m); }
+  if (junkMeshes.length) addDebugLog(`🗑️ 余分メッシュ除外: ${junkMeshes.map(m=>m.name).join(',')}`);
+  player.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = true;
+      // ★実物寄り：元テクスチャの模様を活かしつつ赤銅のクリアコート殻に
+      o.material = makeBeetleMaterial(o.material, 0xa06838);
+    }
+  });
+  scene.add(player);
+
+  playerMixer = new THREE.AnimationMixer(player);
+  gltf.animations.forEach(clip => { pActions[clip.name] = playerMixer.clipAction(clip); });
+  pBones = cacheBones(player);
+  // プレイヤーの全ボーン初期姿勢も保存(被弾React後の復元用)
+  player.traverse(o => {
+    if (o.isBone) {
+      playerRestPoses[o.name] = {
+        px: o.position.x, py: o.position.y, pz: o.position.z,
+        qx: o.quaternion.x, qy: o.quaternion.y, qz: o.quaternion.z, qw: o.quaternion.w,
+        sx: o.scale.x, sy: o.scale.y, sz: o.scale.z,
+      };
+    }
+  });
+  computeLocalForward(player, pBones);
+  addDebugLog(`➡️ 前方向算出: (${localForward.x.toFixed(2)}, ${localForward.z.toFixed(2)})`);
+
+  // ---- 相手（P2）: 同じモデルを複製して赤く ----
+  enemy = SkeletonUtils.clone(gltf.scene);
+  // ★重要：クローン元(player)の回転πが、オイラー角(x:180°, z:180°)という
+  //   等価な別分解でコピーされてしまう。これが残ると rotation.y の操作が
+  //   逆向きに効く座標系になり、AIが真逆を向いて固まる。完全リセットで除去。
+  enemy.rotation.set(0, 0, 0);
+  enemy.scale.set(0.5, 0.5, 0.5);
+  enemy.position.set(0, 0, -8);
+  // プレイヤーの方を向く(実測localForwardから自動計算。モデル規約が変わっても正しい)
+  {
+    const _toP = Math.atan2(player.position.x - enemy.position.x, player.position.z - enemy.position.z);
+    const _fA = Math.atan2(localForward.x, localForward.z);
+    enemy.rotation.y = _toP - _fA;
+    // 🧭診断: 敵の実際の向きと「プレイヤーへの方向」のズレを数値化
+    enemy.updateMatrixWorld(true);
+    const _eF = _vecPool._eF.copy(localForward).applyQuaternion(enemy.quaternion);
+    const _tv = new THREE.Vector3(player.position.x - enemy.position.x, 0, player.position.z - enemy.position.z).normalize();
+    const _dot = _eF.x * _tv.x + _eF.z * _tv.z;
+    addDebugLog(`🧭 敵スポーン: dot=${_dot.toFixed(2)} (1=正対/-1=真逆) lf=(${localForward.x.toFixed(2)},${localForward.z.toFixed(2)}) rot=${(enemy.rotation.y*180/Math.PI).toFixed(0)}°`);
+  }
+  const junkMeshes2 = [];
+  enemy.traverse(o => {
+    if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh) {
+      junkMeshes2.push(o);
+    }
+  });
+  for (const m of junkMeshes2) { if (m.parent) m.parent.remove(m); }
+  enemy.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true; o.receiveShadow = true;
+      // ★深い赤黒のクリアコート殻。プレイヤーと差別化しつつ実物寄り
+      o.material = makeBeetleMaterial(o.material, 0x6a241a);
+    }
+  });
+  scene.add(enemy);
+
+  enemyMixer = new THREE.AnimationMixer(enemy);
+  gltf.animations.forEach(clip => { eActions[clip.name] = enemyMixer.clipAction(clip); });
+  eBones = cacheBones(enemy);
+  // ★ロード時の全ボーンの初期姿勢(=レストポーズ)を保存。React終了時にこれで復元する。
+  //   skeleton.pose() は root bone の親が Object3D の場合、局所行列に bind時ワールド行列を
+  //   代入してしまう仕様のせいで、enemy が動いた後だと不整合になる。手動保存が確実。
+  enemy.traverse(o => {
+    if (o.isBone) {
+      enemyRestPoses[o.name] = {
+        px: o.position.x, py: o.position.y, pz: o.position.z,
+        qx: o.quaternion.x, qy: o.quaternion.y, qz: o.quaternion.z, qw: o.quaternion.w,
+        sx: o.scale.x, sy: o.scale.y, sz: o.scale.z,
+      };
+    }
+  });
+  addDebugLog(`💾 P2レストポーズ保存: ${Object.keys(enemyRestPoses).length}ボーン`);
+
+  // 攻撃モーションが最後まで再生されたら自由に動けるモードへ戻る
+  playerMixer.addEventListener('finished', (e) => {
+    if (attackAnimName && e.action === pActions[attackAnimName]) {
+      state = STATE.FREE;
+      // 次回攻撃のため timeScale を通常速度に戻す
+      if (pCurrent) pCurrent.setEffectiveTimeScale(1.0);
+      setStatus('相手に近づいて攻撃しよう！', false);
+      addDebugLog('↩️ 攻撃モーション終了');
+    }
+    // 被弾リアクション終了：レストポーズ復元して復帰
+    if (reactAnimName && e.action === pActions[reactAnimName]) {
+      player.traverse(o => {
+        if (o.isBone && playerRestPoses[o.name]) {
+          const r = playerRestPoses[o.name];
+          o.position.set(r.px, r.py, r.pz);
+          o.quaternion.set(r.qx, r.qy, r.qz, r.qw);
+          o.scale.set(r.sx, r.sy, r.sz);
+        }
+      });
+      if (!gameOver) {
+        if (pThrowTargetPos) {
+          player.position.x = pThrowTargetPos.x;
+          player.position.z = pThrowTargetPos.z;
+        }
+        player.position.y = 0;
+      }
+      pThrowStartPos = null;
+      pThrowTargetPos = null;
+      playerThrown = false;
+      state = STATE.FREE;
+      addDebugLog('↩️ 起き上がった');
+    }
+  });
+  // 注：STANCE中は pCurrent.paused=true なのでこのイベントは発火しない。
+  // Space離してBITING→アニメ最後まで再生完了時にのみ発火する
+  // 被弾リアクションが最後まで再生されたら、飛ばされた最終位置をenemy.positionに吸収して
+  // Rootボーンをリセットする。これで「原点にスライドして戻る」不自然な動きを防ぐ
+  const _absorbTmp = new THREE.Vector3();
+  enemyMixer.addEventListener('finished', (e) => {
+    if (reactAnimName && e.action === eActions[reactAnimName]) {
+      const rootBone = enemy.getObjectByName('Root');
+      // 自前の投げモーションで既に着地位置に運んでるので、Root吸収はスキップ
+      // (場外落下中はスナップさせない)
+      if (!gameOver) {
+        if (throwTargetPos) {
+          enemy.position.x = throwTargetPos.x;
+          enemy.position.z = throwTargetPos.z;
+        }
+        enemy.position.y = 0;
+        // ★着地したら体勢を立て直してプレイヤーの方を向く
+        //   (運搬中にP1と同じ向きにされた状態が残ると、ずっとそっぽ向きになる)
+        enemy.rotation.x = 0;
+        enemy.rotation.z = 0;
+        const _toP2 = Math.atan2(player.position.x - enemy.position.x, player.position.z - enemy.position.z);
+        const _fA2 = Math.atan2(localForward.x, localForward.z);
+        enemy.rotation.y = _toP2 - _fA2;
+      }
+      throwStartPos = null;
+      throwTargetPos = null;
+      addDebugLog(`↩️ P2着地 (${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)})`);
+      // アクション即停止＆スケルトンをレストポーズ(バインドポーズ)に戻す
+      //   注：手動で bone.position.set(0,0,0) するのは間違い。
+      //   Blenderの各ボーンはレスト状態でも (0,0,0) じゃなく親からの局所オフセット位置にあるので、
+      //   手動リセットすると全ボーンが原点に集約されてしまい、次のバイト判定が壊れる。
+      //   skeleton.pose() ならバインド(元の姿勢)に正しく戻せる。
+      e.action.stop();
+      // ロード時に保存したレストポーズを各ボーンに正確に復元
+      // (skeleton.pose() は root boneの局所行列を bind時ワールド行列で上書きする仕様上、
+      //  enemyが動いた後だと座標系が狂うのでこちらの方が安全)
+      let restoredCount = 0;
+      enemy.traverse(o => {
+        if (o.isBone && enemyRestPoses[o.name]) {
+          const rest = enemyRestPoses[o.name];
+          o.position.set(rest.px, rest.py, rest.pz);
+          o.quaternion.set(rest.qx, rest.qy, rest.qz, rest.qw);
+          o.scale.set(rest.sx, rest.sy, rest.sz);
+          restoredCount++;
+        }
+      });
+      enemyState = ENEMY_STATE.FREE;
+      if (eCurrent === e.action) eCurrent = null;
+    }
+  });
+
+  buildColliderMeshes();
+
+  idleReady = true;
+  document.getElementById('loading').style.display = 'none';
+  addDebugLog('🎮 準備完了');
+  addDebugLog('💡 Vキーで当たり判定表示切替');
+ } catch (e) {
+  addDebugLog(`❌ セットアップ失敗: ${e.message}`);
+  console.error(e);
+  document.getElementById('loading').innerHTML =
+    `<div>❌ エラー</div><div style="font-size:14px;margin-top:10px;color:#ff9999;">${e.message}</div>`;
+ }
+}, (p) => {
+  const pct = p.total > 0 ? Math.round(p.loaded / p.total * 100) : 0;
+  document.getElementById('loadingPercent').textContent = `${pct}%`;
+}, (err) => {
+  addDebugLog(`❌ ${err.message}`);
+  document.getElementById('loading').innerHTML =
+    `<div>❌ 読み込みエラー</div><div style="font-size:14px;margin-top:10px;color:#ff9999;">${err.message||'ファイルが見つかりません'}</div>`;
+});
+
+// ========== 入力 ==========
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyQ') {
+    lockOnActive = !lockOnActive;
+    addDebugLog(lockOnActive ? '🎯 ロックオン ON' : '🎯 ロックオン OFF');
+  }
+});
+window.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+function setupButton(id, code) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  const on  = (e) => { if (e) e.preventDefault(); keys[code] = true;  btn.classList.add('active'); };
+  const off = (e) => { if (e) e.preventDefault(); keys[code] = false; btn.classList.remove('active'); };
+  btn.addEventListener('touchstart', on);
+  btn.addEventListener('touchend', off);
+  btn.addEventListener('touchcancel', off); // 指が外れた/中断された時も確実に解除
+  btn.addEventListener('mousedown', on);
+  btn.addEventListener('mouseup', off);
+  btn.addEventListener('mouseleave', off);
+}
+setupButton('dpad-up', 'ArrowUp');
+setupButton('dpad-down', 'ArrowDown');
+setupButton('dpad-left', 'ArrowLeft');
+setupButton('dpad-right', 'ArrowRight');
+setupButton('attackBtn', 'Space');
+// ガード：長押しで keys.ShiftLeft をON
+setupButton('guardBtn', 'ShiftLeft');
+// 吹き飛ばしは廃止
+// プッシュ：タップで keys.KeyE をON（押した瞬間に発動）
+setupButton('pushBtn', 'KeyE');
+// ロックオン：タップでトグル
+const lockonBtn = document.getElementById('lockonBtn');
+if (lockonBtn) {
+  const toggleLock = (e) => {
+    if (e) e.preventDefault();
+    lockOnActive = !lockOnActive;
+    addDebugLog(lockOnActive ? '🎯 ロックオン ON' : '🎯 ロックオン OFF');
+  };
+  lockonBtn.addEventListener('touchstart', toggleLock);
+  lockonBtn.addEventListener('mousedown', toggleLock);
+}
+
+// ========== 攻撃ジョイスティック ==========
+const atkStickEl = document.getElementById('atkStick');
+const atkKnobEl = document.getElementById('atkStickKnob');
+const STICK_RADIUS = 55; // ノブ最大移動px
+let stickPointerId = null;
+const stickCenter = { x: 0, y: 0 };
+
+function stickStart(e) {
+  e.preventDefault();
+  const t = e.changedTouches ? e.changedTouches[0] : e;
+  stickPointerId = (t.identifier !== undefined) ? t.identifier : 'mouse';
+  const rect = atkStickEl.getBoundingClientRect();
+  stickCenter.x = rect.left + rect.width / 2;
+  stickCenter.y = rect.top + rect.height / 2;
+  joyActive = true;
+  stickMove(e);
+}
+function stickMove(e) {
+  if (!joyActive) return;
+  e.preventDefault();
+  let t = e;
+  if (e.changedTouches) {
+    t = null;
+    for (const touch of e.changedTouches) {
+      if (touch.identifier === stickPointerId) { t = touch; break; }
+    }
+    if (!t) return;
+  }
+  let dx = t.clientX - stickCenter.x;
+  let dy = t.clientY - stickCenter.y;
+  const dist = Math.hypot(dx, dy);
+  const clamped = Math.min(dist, STICK_RADIUS);
+  if (dist > 0.01) { dx = dx / dist * clamped; dy = dy / dist * clamped; }
+  atkKnobEl.style.transform = `translate(${dx}px, ${dy}px)`;
+  joyPullRatio = clamped / STICK_RADIUS;
+  joyDirection = (dy > 0) ? 'down' : 'up';
+  joyVecX = dx / STICK_RADIUS;
+  joyVecY = dy / STICK_RADIUS;
+}
+function stickEnd(e) {
+  if (!joyActive) return;
+  e.preventDefault();
+  joyReleasedThisFrame = true;
+  joyReleasePull = joyPullRatio;
+  // CARRYING中: 30%以上倒して離したら、その方向に投げる
+  if (state === STATE.CARRYING && joyPullRatio >= 0.3) {
+    joyThrowRequest = true;
+    joyThrowVecX = joyVecX;
+    joyThrowVecY = joyVecY;
+  }
+  joyActive = false;
+  joyPullRatio = 0;
+  joyDirection = null;
+  atkKnobEl.style.transform = 'translate(0, 0)';
+  stickPointerId = null;
+}
+if (atkStickEl) {
+  atkStickEl.addEventListener('touchstart', stickStart, { passive: false });
+  atkStickEl.addEventListener('touchmove', stickMove, { passive: false });
+  atkStickEl.addEventListener('touchend', stickEnd, { passive: false });
+  atkStickEl.addEventListener('touchcancel', stickEnd, { passive: false });
+  atkStickEl.addEventListener('mousedown', stickStart);
+  window.addEventListener('mousemove', stickMove);
+  window.addEventListener('mouseup', stickEnd);
+}
+
+// ========== アニメ再生ヘルパー ==========
+function playP(name, opt = {}) {
+  const target = pActions[name];
+  if (!target || pCurrent === target) return;
+  if (pCurrent) pCurrent.fadeOut(0.2);
+  target.reset()
+    .setLoop(opt.loop === false ? THREE.LoopOnce : THREE.LoopRepeat)
+    .setEffectiveTimeScale(opt.speed || 1)
+    .fadeIn(0.2).play();
+  target.clampWhenFinished = opt.loop === false;
+  pCurrent = target;
+}
+function stopP() {
+  if (pCurrent) { pCurrent.fadeOut(0.2); pCurrent = null; }
+}
+// ★プレイヤーを赤く光らせる(プッシュ溜め中の telegraph)。intensity=0で消灯
+// ★攻撃=赤 / 防御=青 のハイライト(自分・相手両方)。三すくみを読みやすくする telegraph
+const GRAB_GLOW  = 0xff0000; // 掴み(このクワガタ特有の攻撃)=赤 ★色ルール:赤=その虫特有の攻撃
+const PUSH_GLOW  = 0xffd400; // プッシュ=黄色 ★色ルール:黄色=プッシュ(全虫共通)
+const GUARD_GLOW = 0x2f6bff; // ガード=青 ★色ルール:青=ガード(全虫共通)
+const STUN_GLOW  = 0xdddde8; // スタン=白っぽくぼんやり点滅(無防備の目印)
+const _glowMats = { player: null, enemy: null };
+const _glowCol = new THREE.Color();
+function setGlow(who, colorHex, intensity) {
+  const src = (who === 'enemy') ? enemy : player;
+  if (!src) return;
+  if (!_glowMats[who]) {
+    const arr = [];
+    src.traverse(o => { if (o.isMesh && o.material && o.material.emissive) arr.push(o.material); });
+    _glowMats[who] = arr;
+  }
+  if (intensity > 0) _glowCol.set(colorHex);
+  for (const mt of _glowMats[who]) {
+    if (intensity > 0) { mt.emissive.copy(_glowCol); mt.emissiveIntensity = intensity; }
+    else { mt.emissive.setRGB(0, 0, 0); mt.emissiveIntensity = 0; }
+  }
+}
+
+// ========== ゲーム状態 ==========
+// FREE: 通常歩行
+// STANCE: Space押しっぱで顎を開いた構え状態。移動可能(W押しなら突進)。離すと噛む
+// BITING: 噛みつきモーション再生中。移動不可。噛み判定はこの状態で発火
+const STATE = { FREE: 'free', STANCE: 'stance', BITING: 'biting', CARRYING: 'carrying', PUSHING: 'pushing', PUSH_CHARGE: 'push_charge', STUN: 'stun' };
+const ENEMY_STATE = { FREE: 'free', GRIPPED: 'gripped', REACTING: 'reacting' };
+let state = STATE.FREE;
+let enemyState = ENEMY_STATE.FREE;
+let spaceWasDown = false;
+let biteResolved = false;
+let stanceLegsAction = null; // 構え中に脚だけ動かす歩行アクション
+let wasChargingLastFrame = false; // STANCE中の突進(W押下)開始検出用
+let gripTimer = 0; // 掴んでる時間(秒)
+// 掴んだ部位ごとに変わる攻撃パラメータ
+let gripAttackDur = 0.75;  // 掴み時間(運搬)
+let gripAttackKb = 6.0;    // ノックバック距離
+let gripAttackAngle = Math.PI / 9; // ノックバック角度オフセット(20°)
+// 投げモーション用（React期間中に滑らかに移動+放物線）
+let throwStartPos = null;    // 投げ開始時のP2位置
+let throwTargetPos = null;   // 投げ着地目標位置
+let throwStartTime = 0;      // 投げ開始時刻(秒)
+const THROW_DURATION = 1.65; // 投げの飛行時間(秒)
+let throwArcHeight = 1.5; // 投げの放物線の高さ（掴み1.5 / 吹き飛ばし3.0）
+
+const statusEl = document.getElementById('status');
+// 毎フレームのDOM取得を避けるためキャッシュ(ループ外で1回だけ)
+const staminaFillEl = document.getElementById('staminaFill');
+const guardBtnCacheEl = document.getElementById('guardBtn');
+function setStatus(text, hot) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle('grabbing', !!hot);
+}
+
+const ATTACK_RANGE = 7;
+const BITE_CONNECT_RANGE = 1.5; // ボーン根元判定なので、大顎の実長分を許容
+const BITE_LOCK_TIME = 25 / 24;   // 攻撃全体で大顎が咬み込むタイミング
+const STANCE_HOLD_TIME = 12 / 24; // 大顎が開いて構え姿勢になる瞬間。ここで停止して溜め。離すと突進&噛み
+const CHARGE_SPEED = 7;           // 構え+W時の接近速度(通常5より1.4倍、急接近感)
+
+// ========== 更新ループ ==========
+const clock = new THREE.Clock();
+const moveSpeed = 5, rotSpeed = 1.5; // 4→5(移動体感改善), 2.5→1.5(回転を狙いやすく)
+const STEP_CADENCE = 0.7; // 脚アニメ速度=移動速度×これ(大きいほど脚が速く回る=滑り減)。要調整
+const BOB_AMP = 0.09;     // 歩行時の上下バウンド量(床を踏んで歩いてる感)。0で無効
+let walkBobPhase = 0, bobBlend = 0; // 歩行バウンドの位相と強さ(発停で滑らかに)
+// ★切り株の摩擦(慣性): 移動を速度ベースにして重み(踏み込み/踏ん張り)を出す
+let playerVelX = 0, playerVelZ = 0; // プレイヤーの現在速度(world)
+const ACCEL_RATE = 12;    // 加速の速さ(小さいほど摩擦を感じてゆっくり動き出す)
+const FRICTION_RATE = 20; // 停止の速さ(大きいほどグッと止まる=摩擦強い)
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+    // ===== 組み合い(鍔迫り合い): 掴みが被った時の押し合い演出 =====
+    if (grappleActive && player && enemy) {
+      grappleTimer -= dt;
+      const _now = performance.now();
+      const _gap = 1.28 + Math.sin(_now * 0.011) * 0.16; // 押し合い(近づいたり離れたり)
+      const _jx = (Math.random() - 0.5) * 0.06, _jz = (Math.random() - 0.5) * 0.06;
+      player.position.x = grappleMid.x - grappleDir.x * _gap + _jx;
+      player.position.z = grappleMid.z - grappleDir.z * _gap + _jz;
+      enemy.position.x  = grappleMid.x + grappleDir.x * _gap - _jx;
+      enemy.position.z  = grappleMid.z + grappleDir.z * _gap - _jz;
+      player.position.y = Math.abs(Math.sin(_now * 0.03)) * 0.05;
+      enemy.position.y  = Math.abs(Math.cos(_now * 0.03)) * 0.05;
+      faceDir(player, grappleDir.x, grappleDir.z);
+      faceDir(enemy, -grappleDir.x, -grappleDir.z);
+      // 大顎の接点で火花を連続
+      grappleSparkTimer -= dt;
+      if (grappleSparkTimer <= 0) {
+        grappleSparkTimer = 0.14; // 火花の頻度(軽量化のため間隔広め)
+        const _sp = grappleMid.clone(); _sp.y = 1.3;
+        _sp.x += (Math.random() - 0.5) * 0.35; _sp.z += (Math.random() - 0.5) * 0.35;
+        spawnClashBurst(_sp);
+      }
+      if (grappleTimer <= 0) {
+        // 決着: 両者を大きく弾き飛ばす + 特大クラッシュ
+        grappleActive = false;
+        player.position.addScaledVector(grappleDir, -2.6);
+        enemy.position.addScaledVector(grappleDir, 2.6);
+        player.position.y = 0; enemy.position.y = 0;
+        const _sp = grappleMid.clone(); _sp.y = 1.3;
+        spawnClashBurst(_sp); spawnClashBurst(_sp);
+        hitStopTime = 0.16; shakeTime = 0.45; shakeIntensity = 0.4;
+        // ★止めていた攻撃アニメは"再開"せずフェードアウト(幻の攻撃モーション/挙動乱れを防ぐ)
+        if (pCurrent) { pCurrent.paused = false; pCurrent.fadeOut(0.15); pCurrent = null; }
+        if (eCurrent) { eCurrent.paused = false; eCurrent.fadeOut(0.15); eCurrent = null; }
+        // 両者クリーンに仕切り直し
+        state = STATE.FREE;
+        playerVelX = 0; playerVelZ = 0;
+        cancelEnemyAttack();              // 敵の攻撃/プッシュ/ガード/反応予約を全リセット
+        aiBehavior = 'approach';          // 仕切り直し後は再接近
+        aiDecideTimer = 0.35;             // 少し間を置いて再判断
+        _ePrevPos.copy(enemy.position);   // 位置ジャンプで脚が暴れないように
+        setStatus('⚔ 組み合い決着！仕切り直し！', true);
+        addDebugLog('🤼 組み合い終了→両者吹き飛び');
+      }
+    }
+
+  if (player && idleReady && !grappleActive) {
+    let moving = false;
+    let moveFwd = false, moveBack = false, moveStrafe = false; // 脚アニメの向き判定用
+    let locoSpeed = 0; // 実際の移動速度(脚アニメの速度連動用=足が滑らないように)
+    if (state === STATE.BITING || state === STATE.PUSHING) { playerVelX = 0; playerVelZ = 0; }
+
+    // --- Space/Fの押した瞬間・離した瞬間を両方検出 ---
+    const spaceDown = !!keys.Space;
+    const spacePressed = spaceDown && !spaceWasDown;
+    const spaceReleased = !spaceDown && spaceWasDown;
+    spaceWasDown = spaceDown;
+    const fDown = !!keys.KeyF;
+    const fPressed = fDown && !fWasDown;
+    const fReleased = !fDown && fWasDown;
+    fWasDown = fDown;
+    const shiftDownNow = !!(keys.ShiftLeft || keys.ShiftRight);
+    const shiftPressed = shiftDownNow && !shiftWasDown; // 押した瞬間のみ(保持は含まない)
+    shiftWasDown = shiftDownNow;
+    const eDown = !!keys.KeyE;
+    const ePressed = eDown && !eWasDown;
+    const eReleased = !eDown && eWasDown;
+    eWasDown = eDown;
+
+    // ===== スタン中(スタミナ切れ): 行動不能でよろける =====
+    if (state === STATE.STUN) {
+      stunTimer -= dt;
+      stamina = Math.min(MAX_STAMINA, stamina + STAM_REGEN_STUN * dt);
+      player.rotation.y += Math.sin(performance.now() * 0.018) * 0.04; // よろけ演出
+      playerVelX = 0; playerVelZ = 0;
+      if (stunTimer <= 0) { state = STATE.FREE; setStatus('復帰！', false); addDebugLog('✨ スタン回復'); }
+    }
+
+    // --- 移動・回転（BITING/PUSHING/STUN中は動けない） ---
+    if (state !== STATE.BITING && state !== STATE.PUSHING && state !== STATE.STUN && !gameOver && !playerThrown) {
+      // 構え中(STANCE)＋前進(W)＝突進！速度アップ
+      // ガード判定：Shift押しっぱなしで速度半分
+      guardHeld = !!(keys.ShiftLeft || keys.ShiftRight);
+      const speedMult = (state === STATE.PUSH_CHARGE) ? 0.35 : (guardHeld ? 0.5 : 1.0);
+      const _locoP0 = player.position.clone(); // 移動前の位置(実移動距離の計測用)
+      const fwdSpeed = (state === STATE.STANCE && (keys.KeyW || keys.ArrowUp)) ? CHARGE_SPEED : moveSpeed;
+      // ★目標速度を計算(直接動かさず、後で摩擦つきで反映)
+      const _fwd = _vecPool._fwd.copy(localForward).applyQuaternion(player.quaternion);
+      let _tvx = 0, _tvz = 0;
+      if (keys.KeyW || keys.ArrowUp) {
+        _tvx += _fwd.x * fwdSpeed; _tvz += _fwd.z * fwdSpeed; moving = true; moveFwd = true;
+      }
+      if (keys.KeyS || keys.ArrowDown) {
+        _tvx -= _fwd.x * moveSpeed; _tvz -= _fwd.z * moveSpeed; moving = true; moveBack = true;
+      }
+      // A/D: ロックオン中 or 運搬中はストレイフ、通常時は回転
+      if ((lockOnActive || state === STATE.CARRYING) && enemy) {
+        const _right = new THREE.Vector3(-_fwd.z, 0, _fwd.x);
+        if (keys.KeyA || keys.ArrowLeft)  { _tvx -= _right.x * moveSpeed; _tvz -= _right.z * moveSpeed; moving = true; moveStrafe = true; }
+        if (keys.KeyD || keys.ArrowRight) { _tvx += _right.x * moveSpeed; _tvz += _right.z * moveSpeed; moving = true; moveStrafe = true; }
+      } else {
+        if (keys.KeyA || keys.ArrowLeft)  player.rotation.y += rotSpeed * dt;
+        if (keys.KeyD || keys.ArrowRight) player.rotation.y -= rotSpeed * dt;
+      }
+      _tvx *= speedMult; _tvz *= speedMult;
+      // ロックオン自動注視(運搬・掴み中は無効=クルクル回り防止)
+      if (lockOnActive && enemy && state !== STATE.CARRYING && enemyState !== ENEMY_STATE.GRIPPED) {
+        const dxL = enemy.position.x - player.position.x;
+        const dzL = enemy.position.z - player.position.z;
+        if (Math.hypot(dxL, dzL) > 0.01) {
+          const fwdV = _vecPool.fwdV.copy(localForward).applyQuaternion(player.quaternion);
+          const currentAng = Math.atan2(fwdV.x, fwdV.z);
+          const targetAng = Math.atan2(dxL, dzL);
+          let diff = targetAng - currentAng;
+          while (diff > Math.PI) diff -= 2 * Math.PI;
+          while (diff < -Math.PI) diff += 2 * Math.PI;
+          player.rotation.y += diff * 0.15;
+        }
+      }
+      // ★摩擦(慣性): 速度を目標へなめらかに。入力ありは加速(踏み込み)、なしは摩擦で減速(踏ん張って止まる)
+      {
+        const _hasInput = (_tvx !== 0 || _tvz !== 0);
+        const _rate = _hasInput ? ACCEL_RATE : FRICTION_RATE;
+        const _k = 1 - Math.exp(-_rate * Math.max(dt, 0.0001));
+        playerVelX += (_tvx - playerVelX) * _k;
+        playerVelZ += (_tvz - playerVelZ) * _k;
+        if (!_hasInput && Math.hypot(playerVelX, playerVelZ) < 0.05) { playerVelX = 0; playerVelZ = 0; }
+        player.position.x += playerVelX * dt;
+        player.position.z += playerVelZ * dt;
+        if (Math.hypot(playerVelX, playerVelZ) > 0.15) moving = true; // 慣性で滑走中も脚を動かす
+      }
+
+      // 実際に進んだ距離から移動速度を算出(脚アニメ速度の連動用)
+      locoSpeed = player.position.distanceTo(_locoP0) / Math.max(dt, 0.001);
+
+      // ★切り株の縁チェック：はみ出たら落下＝負け！
+      const distC = bodyCenterDist(pBones, player);
+      if (distC > STUMP_RADIUS && !gameOver) {
+        triggerFall(player, true);
+      }
+
+      // ★体同士の貫通防止：P1がP2の体に食い込んだら押し戻す
+      resolveBodyCollisions();
+    }
+
+    // --- 相手との距離 ---
+    const dx = enemy.position.x - player.position.x;
+    const dz = enemy.position.z - player.position.z;
+    const distToEnemy = Math.hypot(dx, dz);
+
+    // --- Space押下：構え開始（顎を開いてSTANCE状態へ） ---
+    if (!gameOver && !playerThrown && spacePressed && state === STATE.FREE && attackAnimName) {
+      // スタミナ最低値チェック
+      const requiredStam = STAM_MIN_GRAB;
+      if (stamina < requiredStam) {
+        addDebugLog(`💤 スタミナ不足！ (${Math.floor(stamina)}/${requiredStam})`);
+        setStatus('スタミナ不足…', false);
+        // フォールスルー、STANCE遷移しない
+      } else {
+      state = STATE.STANCE;
+      biteResolved = false;
+      attackMode = 'grab';
+      // スタミナ消費（構え開始時に）
+      stamina -= STAM_COST_GRAB;
+      addDebugLog(attackMode === 'blowaway' ? '💥 吹き飛ばし構え' : '🦾 掴み構え(顎を開く)');
+      const a = pActions[attackAnimName];
+      if (a) {
+        a.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+        a.clampWhenFinished = true;
+        pCurrent = a;
+      }
+      setStatus(attackMode === 'blowaway' ? '💥 吹き飛ばし構え！' : '構え中！離すと噛む', true);
+      } // else閉じ (スタミナOK分岐)
+    }
+
+    // --- STANCE中：大顎が全開になる瞬間(f22)にアニメを一時停止して保持 ---
+    if (state === STATE.STANCE && pCurrent && pCurrent.time >= STANCE_HOLD_TIME) {
+      pCurrent.paused = true;
+      // W押下中は「突進中！」表示
+      if (keys.KeyW || keys.ArrowUp) {
+        setStatus('突進中！', true);
+      } else {
+        setStatus('構え中！離すと噛む', true);
+      }
+    }
+    // --- 突進(STANCE中のW押下)の立ち上がり検出：Space先押しからW後押しでもログを残す ---
+    const isChargingNow = (state === STATE.STANCE) && (keys.KeyW || keys.ArrowUp);
+    if (isChargingNow && !wasChargingLastFrame) {
+      addDebugLog('💨 突進開始(W+構え)');
+    }
+    wasChargingLastFrame = isChargingNow;
+
+    // ========== プッシュ(三すくみ・長押しチャージ式) ==========
+    // 発動: FREEでEキー押下→溜め開始(黄色く光る=相手にバレる)。離すと威力に応じて発射
+    if (!gameOver && !playerThrown && ePressed && state === STATE.FREE && stamina >= STAM_COST_PUSH) {
+      state = STATE.PUSH_CHARGE;
+      pushChargeTime = 0;
+      stamina -= STAM_COST_PUSH;
+      addDebugLog('👊 プッシュ溜め開始');
+      setStatus('👊 溜め中…離して発射！', true);
+      const pa = pActions[attackAnimName];
+      if (pa) { pa.reset().setLoop(THREE.LoopOnce).setEffectiveTimeScale(1.0).fadeIn(0.05).play(); pa.clampWhenFinished = true; pa.time = STANCE_HOLD_TIME; pa.paused = true; pCurrent = pa; }
+    }
+    // プッシュ溜め中(赤グロー+威力アップ)
+    if (state === STATE.PUSH_CHARGE) {
+      pushChargeTime += dt;
+      const chargeRatio = Math.min(1, pushChargeTime / PUSH_MAX_CHARGE);
+      pushPower = PUSH_MIN_POWER + (1 - PUSH_MIN_POWER) * chargeRatio;
+      // 赤グロー(溜めるほど強く)は下部の統一ハイライトでstateに応じ自動表示
+      stamina -= STAM_DRAIN_PUSH_CHARGE * dt;
+      // ★離した"瞬間"の1フレームを取り逃すと溜めっぱなしで固まる。
+      //   「Eが今押されていない」なら常に発射することで確実に解除する。
+      //   さらに2.5秒超で強制発射(入力固着の最悪ケースでも固まらない安全網)。
+      if (!eDown || stamina <= 0 || pushChargeTime > 2.5) {
+        state = STATE.PUSHING;
+        pushTimer = 0;
+        pushResolved = false;
+        const _pw = Math.round(pushPower * 100);
+        addDebugLog(`👊 プッシュ発射！威力${_pw}%`);
+        setStatus(`👊 プッシュ 威力${_pw}%！`, true);
+        const pa = pActions[attackAnimName];
+        if (pa) { pa.paused = false; pa.setEffectiveTimeScale(2.5); }
+      }
+    }
+    // プッシュ実行中(発射後)
+    if (state === STATE.PUSHING) {
+      pushTimer += dt;
+      const _lunge = PUSH_LUNGE_SPEED * (0.7 + pushPower * 0.6); // 威力で踏み込みも変化
+      // 前進(短い踏み込み)
+      if (pushTimer < PUSH_ACTIVE_END) {
+        const pf = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
+        const npx = player.position.x + pf.x * _lunge * dt;
+        const npz = player.position.z + pf.z * _lunge * dt;
+        if (Math.hypot(npx, npz) < STUMP_RADIUS - 0.3) {
+          player.position.x = npx; player.position.z = npz;
+        }
+      }
+      // 押し出し判定(アクティブ窓の間、1回だけ)
+      if (!pushResolved && pushTimer >= PUSH_ACTIVE_START && pushTimer <= PUSH_ACTIVE_END && enemy && enemyState === ENEMY_STATE.FREE && !gameOver) {
+        const pdx = enemy.position.x - player.position.x;
+        const pdz = enemy.position.z - player.position.z;
+        const pd = Math.hypot(pdx, pdz);
+        // 正面かつ射程内
+        const pf2 = _vecPool.pf2.copy(localForward).applyQuaternion(player.quaternion);
+        const facing = pd > 0.01 ? (pf2.x * pdx + pf2.z * pdz) / pd : 0;
+        if (pd <= PUSH_RANGE && facing > 0.5) {
+          pushResolved = true;
+          const dirx = pd > 0.01 ? pdx / pd : pf2.x;
+          const dirz = pd > 0.01 ? pdz / pd : pf2.z;
+          if (aiAttacking) {
+            // ★プッシュ 〉 掴み : 攻撃(掴み)にくる敵を先に突き飛ばす。大成功(場外チャンス)
+            const _kw = 4.0 + pushPower * 7.0; // 威力で吹き飛び距離(4〜11)
+            enemy.position.x += dirx * _kw;
+            enemy.position.z += dirz * _kw;
+            cancelEnemyAttack();
+            stunEnemy(1.3);                    // ★掴みを潰した相手をスタン=反撃チャンス
+            triggerClashEffect();
+            addDebugLog('💥 プッシュが掴みを潰した！+スタン');
+            setStatus('💥 突き飛ばしてスタン！反撃だ！', true);
+          } else if (aiGuarding) {
+            // ★ガード 〉 プッシュ : 敵のガードでプレイヤーが大きく吹っ飛び+スタン(ガードの報酬は敵側にも)
+            const back = _vecPool.back.copy(localForward).applyQuaternion(player.quaternion);
+            player.position.addScaledVector(back, -4.5);          // 大きく吹っ飛ぶ
+            stunPlayer(1.5);                                       // 敵に反撃チャンス
+            triggerClashEffect();
+            aiDecideTimer = Math.min(aiDecideTimer, 0.1);          // 敵はすぐ攻められる
+            enemyStamina = Math.min(MAX_STAMINA, enemyStamina + 25); // 敵のガード成功報酬
+            addDebugLog('❌ プッシュをガードされ吹っ飛び+スタン');
+            setStatus('❌ ガードされた…吹っ飛んでスタン！大ピンチ！', false);
+            if (bodyCenterDist(pBones, player) > STUMP_RADIUS && !gameOver) triggerFall(player, true);
+          } else if (aiPushing) {
+            // ★プッシュ vs プッシュ → チャージ時間(威力)が長い方が判定勝ち！
+            triggerClashEffect();
+            state = STATE.FREE;
+            if (pCurrent) pCurrent.setEffectiveTimeScale(1.0);
+            cancelEnemyAttack();
+            const _me = pushPower, _op = aiPushPower;
+            if (_me > _op + 0.12) {
+              // プレイヤーの勝ち: 敵を大きく吹っ飛ばす(場外チャンス)
+              const _kw = 4 + _me * 7;
+              enemy.position.x += dirx * _kw; enemy.position.z += dirz * _kw;
+              stunEnemy(1.2);
+              addDebugLog(`⚔ 押し勝ち！(自${Math.round(_me*100)}>敵${Math.round(_op*100)})`);
+              setStatus('💥 チャージ勝ち！押し勝った！', true);
+              if (bodyCenterDist(eBones, enemy) > STUMP_RADIUS && enemyState === ENEMY_STATE.FREE && !gameOver) triggerFall(enemy, false);
+            } else if (_op > _me + 0.12) {
+              // 敵の勝ち: プレイヤーが大きく吹っ飛ばされる
+              const _back = _vecPool._back.copy(localForward).applyQuaternion(player.quaternion);
+              player.position.addScaledVector(_back, -(4 + _op * 7));
+              stunPlayer(1.2);
+              addDebugLog(`⚔ 押し負け…(自${Math.round(_me*100)}<敵${Math.round(_op*100)})`);
+              setStatus('💥 チャージ負け…押し負けた！', false);
+              if (bodyCenterDist(pBones, player) > STUMP_RADIUS && !gameOver) triggerFall(player, true);
+            } else {
+              // 互角: 両者ちょっと吹っ飛ぶ
+              const pb = _vecPool.pb.copy(localForward).applyQuaternion(player.quaternion);
+              const eb = _vecPool.eb.copy(localForward).applyQuaternion(enemy.quaternion);
+              player.position.addScaledVector(pb, -2.0);
+              enemy.position.addScaledVector(eb, -2.0);
+              aiDecideTimer = Math.max(aiDecideTimer, 0.6);
+              addDebugLog('⚔ プッシュ互角！両者吹っ飛び');
+              setStatus('⚔ 互角の押し合い！', true);
+            }
+          } else {
+            // 通常ヒット: 押込み度合い(pushPower)で吹っ飛び距離が変化
+            const _kl = 2.5 + pushPower * 8; // (2.5〜10.5) 溜めるほど大きく吹っ飛ぶ
+            enemy.position.x += dirx * _kl;
+            enemy.position.z += dirz * _kl;
+            aiDecideTimer = Math.max(aiDecideTimer, 0.4);
+            addDebugLog(`👊 プッシュヒット(威力${Math.round(pushPower*100)})`);
+          }
+          // 押し出しで敵が場外なら勝ち
+          if (bodyCenterDist(eBones, enemy) > STUMP_RADIUS && enemyState === ENEMY_STATE.FREE && !gameOver) {
+            triggerFall(enemy, false);
+          }
+        }
+      }
+      // プッシュ終了
+      if (pushTimer >= PUSH_DURATION) {
+        if (state === STATE.PUSHING) state = STATE.FREE;
+        if (pCurrent) pCurrent.setEffectiveTimeScale(1.0);
+      }
+    }
+    // ========== 攻撃ジョイスティック処理 ==========
+    // 引き始め: FREE状態で15%以上引いたらSTANCE突入
+    if (!gameOver && !playerThrown && joyActive && joyPullRatio > 0.15 && joyDirection === 'down' && state === STATE.FREE && attackAnimName) {
+      const mode = 'grab';
+      const requiredStam = (mode === 'blowaway') ? STAM_MIN_BLOWAWAY : STAM_MIN_GRAB;
+      if (stamina >= requiredStam) {
+        state = STATE.STANCE;
+        biteResolved = false;
+        attackMode = mode;
+        stamina -= (mode === 'blowaway') ? STAM_COST_BLOWAWAY : STAM_COST_GRAB;
+        const a = pActions[attackAnimName];
+        if (a) {
+          a.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+          a.clampWhenFinished = true;
+          a.paused = true;
+          pCurrent = a;
+        }
+        joyStanceActive = true;
+        addDebugLog(mode === 'blowaway' ? '💥 吹き飛ばし構え(スティック)' : '🦾 掴み構え(スティック)');
+      } else {
+        // スタミナ不足は一度だけ通知したいので joyStanceActive を悪用せず簡易表示
+        setStatus('スタミナ不足…', false);
+      }
+    }
+    // スティック構え中: 引き量で顎の開きをリアルタイム制御
+    if (joyStanceActive && state === STATE.STANCE && pCurrent) {
+      pCurrent.paused = true;
+      pCurrent.time = STANCE_HOLD_TIME * Math.min(1, joyPullRatio * 1.2);
+      attackMode = 'grab';
+      const pct = Math.round(joyPullRatio * 100);
+      setStatus(attackMode === 'blowaway' ? `💥 吹き飛ばし構え ${pct}%` : `🦾 掴み構え ${pct}%`, true);
+    }
+    // スティックを離した瞬間: 35%以上引いてたら噛みつき発動、弱かったらキャンセル(スタミナ返却)
+    if (joyReleasedThisFrame) {
+      joyReleasedThisFrame = false;
+      if (joyStanceActive && state === STATE.STANCE) {
+        joyStanceActive = false;
+        if (joyReleasePull >= 0.35) {
+          state = STATE.BITING;
+          // 引き量(0.35〜1.0)を威力(0〜1)にマッピング。深く引くほど強い
+          attackPower = Math.max(0, Math.min(1, (joyReleasePull - 0.35) / 0.65));
+          if (pCurrent) pCurrent.paused = false;
+          const _pw = Math.round(attackPower * 100);
+          addDebugLog(attackMode === 'blowaway' ? `💥 スコップ！威力${_pw}%` : '🦷 パクッ！');
+          setStatus(attackMode === 'blowaway' ? `💥 吹き飛ばし 威力${_pw}%！` : '噛みつき！', true);
+        } else {
+          state = STATE.FREE;
+          stamina += (attackMode === 'blowaway') ? STAM_COST_BLOWAWAY : STAM_COST_GRAB; // 返却
+          if (pCurrent) pCurrent.fadeOut(0.15);
+          addDebugLog('↩️ 構えキャンセル(引き弱)');
+          setStatus('相手に近づいて攻撃しよう！', false);
+        }
+      }
+    }
+    // CARRYING中のスティック狙いフィードバック
+    if (state === STATE.CARRYING && joyActive && joyPullRatio > 0.2) {
+      setStatus('🎯 狙い中…離すと投げる！', true);
+    }
+
+    // --- Space離した瞬間：構え解除→顎スナップ閉じ ---
+    if (spaceReleased && state === STATE.STANCE) {
+      state = STATE.BITING;
+      attackPower = 1.0; // キーボードは引き量がないので常に最大威力
+      if (pCurrent) pCurrent.paused = false;
+      addDebugLog(attackMode === 'blowaway' ? '💥 スコップ！' : '🦷 パクッ！');
+      setStatus('噛みつき！', true);
+    }
+
+    // --- ガードキャンセル：噛み判定後のBITING中にShiftでキャンセル可 ---
+    //   （攻撃を外した後の隙にShiftでガード状態に緊急切替）
+    if (state === STATE.BITING && biteResolved && shiftPressed) {
+      state = STATE.FREE;
+      if (pCurrent) {
+        pCurrent.fadeOut(0.15);
+        pCurrent.setEffectiveTimeScale(1.0); // 速度リセット
+      }
+      addDebugLog('🛡️ ガードキャンセル！');
+    }
+
+    // --- BITING中：大顎が閉じる瞬間に全身の当たり判定をチェック ---
+    if (state === STATE.BITING && pCurrent && !biteResolved && pCurrent.time >= BITE_LOCK_TIME) {
+      biteResolved = true;
+      // ★回復モーション高速化：噛み判定通ったので残りの復帰アニメを2倍速で（隙軽減）
+      if (pCurrent) pCurrent.setEffectiveTimeScale(2.0);
+      // ★matrixWorldを強制更新：直前の bone.position/rotation 変更を確実に世界座標に反映
+      player.updateMatrixWorld(true);
+      enemy.updateMatrixWorld(true);
+      // ★診断ログ: Thoraxは正しくMandibleがおかしい問題を追跡
+      if (eBones && eBones['Thorax'] && eBones['Mandible_L']) {
+        const _tp = new THREE.Vector3(), _mp = new THREE.Vector3();
+        eBones['Thorax'].getWorldPosition(_tp);
+        eBones['Mandible_L'].getWorldPosition(_mp);
+        // Mandible の親を辿ってenemyに繋がってるか確認
+        let node = eBones['Mandible_L'];
+        let chain = [];
+        while (node && chain.length < 8) {
+          chain.push(node.name || node.type);
+          node = node.parent;
+        }
+        // 新しく getObjectByName で取ったやつと比較
+        const freshMand = enemy.getObjectByName('Mandible_L');
+        const cachedSameAsFresh = (freshMand === eBones['Mandible_L']);
+        addDebugLog(`🔬 enemy.pos=(${enemy.position.x.toFixed(1)},${enemy.position.z.toFixed(1)}) Thorax=(${_tp.x.toFixed(1)},${_tp.z.toFixed(1)}) Mand=(${_mp.x.toFixed(1)},${_mp.z.toFixed(1)})`);
+        addDebugLog(`🔬 Mandible親: ${chain.join('→')} / cached==fresh=${cachedSameAsFresh}`);
+      }
+      const hit = findClosestHit(pBones, BITE_BONES, eBones);
+      // ★ガード相手は掴みの届く距離を広げる(ガード中でも確実につかめる)
+      const _grabRange = aiGuarding ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE;
+      if (hit.dist <= _grabRange) {
+        // ★掴み 〉 ガード : 敵がガード中でも掴みは通る(ガードごと掴んで崩す)
+        if (aiGuarding) {
+          aiGuarding = false;
+          triggerClashEffect();
+          addDebugLog('🦾 ガードを掴んで崩した！');
+        }
+        addDebugLog(`🦷 掴んだ！部位:${hit.part} 距離${hit.dist.toFixed(2)}`);
+        setStatus('がっちり噛みついた！', true);
+        // ★相殺(正面激突)判定：両者が「同時に」技を出した時のみ発動
+        //   P2のAI実装後、enemyAttackActive=true の間にP1の噛みつきが
+        //   P2の口周りにヒットしたら相殺。両者弾かれて攻撃不成立。
+        let clashed = false;
+        if (enemyAttackActive &&
+            (hit.part === 'Head' || hit.part === 'Mandible_L' || hit.part === 'Mandible_R')) {
+          const _p1f = _vecPool._p1f.copy(localForward).applyQuaternion(player.quaternion);
+          const _p2f = _vecPool._p2f.copy(localForward).applyQuaternion(enemy.quaternion);
+          const dotFwd = _p1f.x * _p2f.x + _p1f.z * _p2f.z;
+          if (dotFwd < -0.3) { // 向かい合ってる
+            clashed = true;
+            // 相殺→組み合い(鍔迫り合い)演出へ
+            startGrapple();
+          }
+        }
+        if (!clashed && enemyState === ENEMY_STATE.FREE) {
+          // GRIPPED状態に入る。掴んだ部位ごとに攻撃タイプを変える
+          enemyState = ENEMY_STATE.GRIPPED;
+          gripTimer = 0;
+          cancelEnemyAttack(); // 敵が攻撃中だったら中断
+          // 掴んだ瞬間のP1↔P2の相対角度を記録(運搬中はこの角度を保って一緒に回る)
+          carryRotOffset = enemy.rotation.y - player.rotation.y;
+          // 掴みモードならCARRYING状態に遷移して移動可能に
+          if (attackMode === 'grab') {
+            state = STATE.CARRYING;
+            // ロックオン中なら一旦解除（投げた後に自動復帰）
+            if (lockOnActive) {
+              lockOnActive = false;
+              lockOnResumeAfterCarry = true;
+              addDebugLog('🎯 ロックオン一時解除(運搬中)');
+            }
+            addDebugLog('🦾 相手を持ち上げた！スティックを倒した方向に投げられる');
+            setStatus('運搬中！スティックで狙って投げる', true);
+          }
+          let attackLabel = '';
+          if (hit.part === 'Head' || hit.part === 'Mandible_L' || hit.part === 'Mandible_R') {
+            // 正面対峙：大顎が絡み合う。短い掴み、強めの押し合い
+            gripAttackDur = 0.55;
+            gripAttackKb = 5.0;
+            gripAttackAngle = Math.PI / 12; // 15°
+            attackLabel = '⚔ 正面組み合い';
+          } else if (hit.part === 'Thorax') {
+            // 側面掴み：しっかり抱えて豪快に投げる
+            gripAttackDur = 1.0;
+            gripAttackKb = 8.0;
+            gripAttackAngle = Math.PI / 5; // 36°
+            attackLabel = '🎯 横抱え投げ';
+          } else if (hit.part === 'Abdomen') {
+            // 背後攻撃：短い掴み、前方向に押し出す
+            gripAttackDur = 0.65;
+            gripAttackKb = 6.0;
+            gripAttackAngle = Math.PI / 15; // 12°
+            attackLabel = '🌀 後方掴み';
+          } else if (hit.part && hit.part.includes('Leg')) {
+            // 脚攻撃：長い掴み(もがき)、短いノックバック(よろけ)
+            gripAttackDur = 1.1;
+            gripAttackKb = 3.5;
+            gripAttackAngle = Math.PI / 6; // 30°
+            attackLabel = '🦿 脚狙い';
+          } else {
+            gripAttackDur = 0.75;
+            gripAttackKb = 6.0;
+            gripAttackAngle = Math.PI / 9;
+            attackLabel = '⚔ 攻撃';
+          }
+          addDebugLog(attackLabel);
+        }
+      } else {
+        addDebugLog(`😅 スカった (最短距離${hit.dist.toFixed(2)} @ ${hit.part})`);
+        setStatus('スカった…', false);
+      }
+    }
+
+    // --- GRIPPED中：P2をP1の口元に追従＋P1アニメ一時停止 ---
+    if (enemyState === ENEMY_STATE.GRIPPED) {
+      gripTimer += dt;
+      // P1のアニメを一時停止して、口が奥に進んで貫通するのを防ぐ
+      if (pCurrent) pCurrent.paused = true;
+      // P2をP1の口元(大顎中点+P1の前方1.5)に配置。P1と同じ向きにして「掴んで持ってる」姿に
+      if (pBones && pBones['Mandible_L'] && pBones['Mandible_R']) {
+        const _mL = new THREE.Vector3(), _mR = new THREE.Vector3();
+        pBones['Mandible_L'].getWorldPosition(_mL);
+        pBones['Mandible_R'].getWorldPosition(_mR);
+        const _mouth = _mL.clone().add(_mR).multiplyScalar(0.5);
+        // CARRYING中はRootを打ち消して口が手前に戻ってるので近め(2.3)、
+        // blowaway掴み中は突進Root込みで口が前に出てるので遠め(3.0)
+        const _mouthOff = (state === STATE.CARRYING) ? 2.3 : 3.0;
+        const _fwd = _vecPool._fwd.copy(localForward).applyQuaternion(player.quaternion).multiplyScalar(_mouthOff);
+        _mouth.add(_fwd);
+        enemy.position.x = _mouth.x;
+        enemy.position.z = _mouth.z;
+        enemy.position.y = Math.max(0, _mouth.y - 0.2);
+        // 掴んだ瞬間の相対角度を保ったまま、P1と一体になって回る（剛体的にくっつく）
+        enemy.rotation.y = player.rotation.y + carryRotOffset;
+      }
+      // 投げトリガー判定:
+      //  blowaway → 掴み時間経過で自動投げ
+      //  grab     → 状態は CARRYING で、Space/スティックで投げる（それまで運搬継続）
+      //  スタミナ切れ → 強制的に離す(弱いドロップ)
+      const forcedDrop = (state === STATE.CARRYING && stamina <= 0);
+      if (forcedDrop) {
+        addDebugLog('💦 スタミナ切れ！相手を離した');
+        setStatus('💦 スタミナ切れ…', false);
+      }
+      const shouldThrow = forcedDrop ||
+        (attackMode === 'blowaway' && gripTimer >= gripAttackDur) ||
+        (attackMode === 'grab' && (spacePressed || joyThrowRequest) && state === STATE.CARRYING);
+      joyThrowRequest = false; // 消費
+      if (shouldThrow) {
+        // CARRYINGなら BITING に戻して、投げアニメ再生を続ける
+        if (state === STATE.CARRYING) {
+          state = STATE.BITING;
+          // 掴み時に解除したロックオンを自動復帰（飛んでいく相手を追尾）
+          if (lockOnResumeAfterCarry) {
+            lockOnActive = true;
+            lockOnResumeAfterCarry = false;
+            addDebugLog('🎯 ロックオン復帰');
+          }
+        }
+        // P1アニメ再開して顎を開き投げモーションへ(掴み時の2倍速回復を解除=投げをしっかり見せる)
+        if (pCurrent) { pCurrent.paused = false; pCurrent.setEffectiveTimeScale(1.0); }
+        // 投げ発動！瞬間テレポートせず、滑らかな放物線モーションで着地位置に運ぶ
+        enemyState = ENEMY_STATE.REACTING;
+        throwStartPos = enemy.position.clone();
+        const _p1Fwd = _vecPool._p1Fwd.copy(localForward).applyQuaternion(player.quaternion);
+        if (attackMode === 'blowaway') {
+          // 吹き飛ばし：相手をP1の真後ろに、高い放物線で投げる
+          // (顎で下から掬って自分の頭上を越えて真後ろに飛ばす)
+          const _back = _p1Fwd.clone().negate();
+          // ★引き量で威力変化: 弱い引き=近く低く、強い引き=遠く高く
+          const kb = (gripAttackKb + 3) * (0.5 + attackPower * 0.85); // ×0.5〜×1.35
+          throwTargetPos = new THREE.Vector3(
+            player.position.x + _back.x * kb,
+            0,
+            player.position.z + _back.z * kb,
+          );
+          throwArcHeight = 2.0 + attackPower * 2.2; // 高さも引き量で 2.0〜4.2
+        } else {
+          // 掴み投げ：スティックで狙った方向に投げる(なければP1正面)
+          // 画面座標→世界座標: 画面上=P1前方、画面右=P1右方向
+          let dirX = _p1Fwd.x, dirZ = _p1Fwd.z;
+          const aimMag = Math.hypot(joyThrowVecX, joyThrowVecY);
+          if (aimMag > 0.15) {
+            const _right = new THREE.Vector3(-_p1Fwd.z, 0, _p1Fwd.x);
+            const f = -joyThrowVecY / aimMag; // 画面上方向=前
+            const r = joyThrowVecX / aimMag;  // 画面右方向=右
+            dirX = _p1Fwd.x * f + _right.x * r;
+            dirZ = _p1Fwd.z * f + _right.z * r;
+            addDebugLog(`🎯 狙い投げ! 前${f.toFixed(2)}/右${r.toFixed(2)}`);
+          }
+          const kbGrab = forcedDrop ? 1.2 : gripAttackKb; // スタミナ切れは目の前に弱く落とすだけ
+          throwTargetPos = new THREE.Vector3(
+            enemy.position.x + dirX * kbGrab,
+            0,
+            enemy.position.z + dirZ * kbGrab,
+          );
+          throwArcHeight = forcedDrop ? 0.5 : 1.5;
+          joyThrowVecX = 0; joyThrowVecY = 0; // 消費
+        }
+        throwStartTime = performance.now() / 1000;
+        addDebugLog(`💫 投げ！(掴み${gripTimer.toFixed(2)}秒/kb${gripAttackKb}) → (${throwTargetPos.x.toFixed(1)}, ${throwTargetPos.z.toFixed(1)})`);
+        if (reactAnimName && eActions[reactAnimName]) {
+          const r = eActions[reactAnimName];
+          if (eCurrent) eCurrent.fadeOut(0.1);
+          r.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+          r.clampWhenFinished = true;
+          eCurrent = r;
+        }
+      }
+    }
+
+    // --- REACTING中：滑らかに放物線を描いて着地位置まで運ぶ ---
+    if (enemyState === ENEMY_STATE.REACTING && throwStartPos && throwTargetPos) {
+      const nowSec = performance.now() / 1000;
+      const t = Math.min(1, (nowSec - throwStartTime) / THROW_DURATION);
+      // イーズアウト（最初速く、着地でゆっくり）
+      const easeT = 1 - (1 - t) * (1 - t);
+      enemy.position.x = throwStartPos.x + (throwTargetPos.x - throwStartPos.x) * easeT;
+      enemy.position.z = throwStartPos.z + (throwTargetPos.z - throwStartPos.z) * easeT;
+      // 放物線Y（sin(π*t)で0→ピーク→0）
+      enemy.position.y = throwArcHeight * Math.sin(Math.PI * easeT);
+      // ★飛行中に切り株の外に出たら、そのまま場外落下＝勝ち！
+      const flyDist = bodyCenterDist(eBones, enemy);
+      if (flyDist > STUMP_RADIUS && !gameOver) {
+        fallVelY = 0; // 現在の高さからそのまま落ち始める
+        triggerFall(enemy, false);
+        throwStartPos = null;
+        throwTargetPos = null;
+      }
+    }
+
+    // ========== 敵AI ==========
+    // ===== 敵スタミナ&スタン更新(公平のため敵にもスタミナ) =====
+    if (enemy && eBones && !gameOver && !grappleActive) {
+      // 敵の移動速度を前フレームの移動量から算出(脚アニメ連動=滑り防止)
+      enemyLocoSpeed = enemy.position.distanceTo(_ePrevPos) / Math.max(dt, 0.001);
+      _ePrevPos.copy(enemy.position);
+      // ★アイドル時の微妙な揺れ(生きてる感=常時ガン見を和らげる)。rotation.y(向き)は触らない
+      if (enemyState === ENEMY_STATE.FREE && !aiStunned && !aiAttacking && !aiPushing && enemyLocoSpeed < 0.6) {
+        const _sw = performance.now() * 0.0016 + 2.1;
+        enemy.rotation.z = Math.sin(_sw) * 0.03;
+        enemy.rotation.x = Math.sin(_sw * 0.63) * 0.02;
+      } else {
+        enemy.rotation.z *= 0.86;
+        enemy.rotation.x *= 0.86;
+      }
+      if (aiStunned) {
+        aiStunTimer -= dt;
+        enemyStamina = Math.min(MAX_STAMINA, enemyStamina + STAM_REGEN_STUN * dt);
+        enemy.rotation.y += Math.sin(performance.now() * 0.018) * 0.04; // よろけ演出
+        if (aiStunTimer <= 0) { aiStunned = false; addDebugLog('✨ 敵スタン回復'); }
+      } else {
+        let eDrain = 0;
+        if (aiGuarding) eDrain += STAM_DRAIN_GUARD;
+        if (aiAttacking) eDrain += 12; // 攻撃(突進含む)継続の消耗
+        if (aiPushing) eDrain += 14;
+        if (eDrain > 0) enemyStamina -= eDrain * dt;
+        else if (enemyState === ENEMY_STATE.FREE) enemyStamina += STAM_REGEN * dt;
+        enemyStamina = Math.max(0, Math.min(MAX_STAMINA, enemyStamina));
+        if (enemyStamina <= 0) stunEnemy();
+      }
+    }
+
+    if (aiPreset && !gameOver && !aiStunned && !grappleActive && enemyState === ENEMY_STATE.FREE && enemy && eBones) {
+      const aDx = player.position.x - enemy.position.x;
+      const aDz = player.position.z - enemy.position.z;
+      const aDist = Math.hypot(aDx, aDz);
+
+      // ===== プレイヤーの技を観測(読み合いに使う) =====
+      aiPlayerIdleTime += dt;
+      let curPS = 'free';
+      if (state === STATE.STANCE) curPS = 'grab';
+      else if (state === STATE.PUSHING || state === STATE.PUSH_CHARGE) curPS = 'push';
+      else if (guardHeld) curPS = 'guard';
+      const newCommit = (curPS !== 'free' && curPS !== aiPrevPlayerState);
+      if (newCommit) recordPlayerMove(curPS);
+      // 反応カウンター予約: 技の出始めを見てから reactDelay 後に正しいカウンターを出す(readChanceで成否)
+      if (newCommit && !aiAttacking && !aiGuarding && !aiPushing && aDist <= aiPreset.attackRange + 1.2 && !aiReactCounter && Math.random() < aiPreset.readChance) {
+        let cm = null;
+        if (curPS === 'grab') cm = 'push';       // プッシュ〉掴み
+        else if (curPS === 'guard') cm = 'grab'; // 掴み〉ガード
+        else if (curPS === 'push') cm = 'guard'; // ガード〉プッシュ
+        if (cm) aiReactCounter = { move: cm, timer: aiPreset.reactDelay };
+      }
+      aiPrevPlayerState = curPS;
+
+      if (!aiAttacking && !aiGuarding && !aiPushing) {
+        // 反応カウンター実行(予約時間が来たら)
+        if (aiReactCounter) {
+          aiReactCounter.timer -= dt;
+          if (aiReactCounter.timer <= 0) {
+            const mv = aiReactCounter.move; aiReactCounter = null;
+            if (mv === 'push') { aiPushing = true; aiPushTimer = 0; aiPushResolved = false; enemyStamina -= 18; aiPushPower = Math.min(1, 0.3 + Math.random() * 0.3 + aiPreset.patience * 0.4); if (eCurrent) eCurrent.fadeOut(0.1); addDebugLog(`🤖👊 反応プッシュ(威力${Math.round(aiPushPower*100)})`); }
+            else if (mv === 'grab') { startEnemyAttack(); addDebugLog('🤖🦷 反応掴み'); }
+            else if (mv === 'guard') { aiGuarding = true; aiGuardTimer = 0; if (eCurrent) eCurrent.fadeOut(0.1); const ew0 = eActions[walkAnimName]; if (ew0 && ew0.isRunning()) ew0.fadeOut(0.1); addDebugLog('🤖🛡️ 反応ガード'); }
+          }
+        }
+        // 🧭診断: 3秒ごとに実際の向きを記録
+        if (!window._aiDiagT) window._aiDiagT = 0;
+        window._aiDiagT += dt;
+        if (window._aiDiagT >= 3) {
+          window._aiDiagT = 0;
+          const _dF = _vecPool._dF.copy(localForward).applyQuaternion(enemy.quaternion);
+          const _dT = Math.hypot(aDx, aDz) > 0.01 ? { x: aDx / aDist, z: aDz / aDist } : { x: 0, z: 1 };
+          const _dd = _dF.x * _dT.x + _dF.z * _dT.z;
+          addDebugLog(`🧭 dot=${_dd.toFixed(2)} rot=${(enemy.rotation.y*180/Math.PI).toFixed(0)}° 行動=${aiBehavior}`);
+        }
+        // 反応カウンターが発動したらこのフレームの通常行動(接近/攻撃)はスキップ
+        if (!aiAttacking && !aiGuarding && !aiPushing) {
+        // --- 向き：まずプレイヤーの方へ旋回(旋回してから動く) ---
+        let aiFaceErr = 0;
+        if (aDist > 0.01) {
+          const eFwd = _vecPool.eFwd.copy(localForward).applyQuaternion(enemy.quaternion);
+          const curAng = Math.atan2(eFwd.x, eFwd.z);
+          const tgtAng = Math.atan2(aDx, aDz);
+          let dAng = tgtAng - curAng;
+          while (dAng > Math.PI) dAng -= 2 * Math.PI;
+          while (dAng < -Math.PI) dAng += 2 * Math.PI;
+          // ほぼ真後ろを向いてる時は3倍速で振り向く(そっぽ向き状態を即解消)
+          const turnMul = (Math.abs(dAng) > 2.0) ? 3.0 : 1.0;
+          const maxTurn = aiPreset.turnRate * turnMul * dt;
+          enemy.rotation.y += Math.max(-maxTurn, Math.min(maxTurn, dAng));
+          aiFaceErr = dAng;
+        }
+
+        // --- 行動決定(間合い管理+癖読み。committした技への即カウンターは上の反応層が担当) ---
+        aiDecideTimer -= dt;
+        if (aiDecideTimer <= 0) {
+          aiDecideTimer = aiPreset.decideEvery;
+          const roll = Math.random();
+          const inRange = aDist <= aiPreset.attackRange && Math.abs(aiFaceErr) < 0.5;
+          // プレイヤーの直近の傾向を読む
+          const grabN = playerMoveHist.filter(m => m === 'grab').length;
+          const pushN = playerMoveHist.filter(m => m === 'push').length;
+          const guardN = playerMoveHist.filter(m => m === 'guard').length;
+          const passive = aiPlayerIdleTime > 1.8;  // しばらく技を出してない = 受け身
+          const aggressive = playerMoveHist.length >= 3 && aiPlayerIdleTime < 1.2; // よく技を出す
+
+          if (state === STATE.STUN && aDist <= aiPreset.attackRange * 1.7) {
+            // ★プレイヤーがスタン中 → 確実に攻める(大チャンス)
+            startEnemyAttack();
+            addDebugLog('🤖💥 スタン狙い撃ち');
+          } else if (enemyStamina < 28 && aDist < aiPreset.attackRange + 0.4 && Math.random() < 0.7) {
+            // ★自分のスタミナ低下 → 間合いを取って回復(自滅スタン回避=賢く粘る)
+            aiBehavior = (Math.random() < 0.5) ? 'spaceL' : 'spaceR';
+            addDebugLog('🤖 スタミナ温存(間合い)');
+          } else if (!playerThrown && state === STATE.BITING && aiPreset.punish && aDist <= aiPreset.attackRange * 1.5 && Math.abs(aiFaceErr) < 0.6) {
+            // ★確定差し込み: プレイヤーが噛みつき硬直中(スカり含む)は必ず攻める
+            startEnemyAttack();
+            addDebugLog('🤖⚡ 硬直に差し込み');
+          } else if (aDist > aiPreset.attackRange + 1.8) {
+            // 遠い: 近づく
+            aiBehavior = 'approach';
+          } else if (!playerThrown && inRange && guardN >= 2 && guardN >= grabN && guardN >= pushN) {
+            // ★ガード多め読み → 掴みで崩す (掴み〉ガード)
+            startEnemyAttack();
+            addDebugLog('🤖🧠 ガード多め読み→掴み');
+          } else if (grabN >= 2 && grabN > guardN && aggressive) {
+            // ★掴み多め読み → 間合いを取って突っ込まない(掴みに刺さらないよう距離を保つ)
+            // 高精度AIは先読みプッシュで潰す(プッシュ〉掴み)、そうでなければ間合いを取る
+            if (inRange && Math.random() < aiPreset.readChance * 0.9) {
+              aiPushing = true; aiPushTimer = 0; aiPushResolved = false;
+              enemyStamina -= 18;
+              aiPushPower = Math.min(1, 0.45 + Math.random() * 0.3 + aiPreset.patience * 0.35);
+              if (eCurrent) eCurrent.fadeOut(0.1);
+              addDebugLog('🤖🔮 先読みプッシュ(掴み予測)');
+            } else {
+              aiBehavior = (roll < 0.5) ? 'spaceL' : 'spaceR';
+              addDebugLog('🤖🧠 掴み多め読み→間合い');
+            }
+          } else if (!playerThrown && passive && inRange && Math.random() < aiPreset.attackChance) {
+            // ★受け身読み → プレッシャーで先に攻める(固まってる相手を動かす)
+            startEnemyAttack();
+            addDebugLog('🤖 受け身読み→プレッシャー');
+          } else if (!playerThrown && inRange && !guardHeld && Math.random() < 0.45) {
+            // ★プッシュを積極的に使う(ガードされてなければ突き飛ばし/場外狙い)
+            aiPushing = true; aiPushTimer = 0; aiPushResolved = false;
+            enemyStamina -= 18;
+            aiPushPower = Math.min(1, 0.4 + Math.random() * 0.35 + aiPreset.patience * 0.35);
+            if (eCurrent) eCurrent.fadeOut(0.1);
+            addDebugLog('🤖👊 積極プッシュ');
+          } else if (roll < aiPreset.patience) {
+            // 間合い管理(フットシー): 攻撃圏の外周を回って隙を待つ ← 突っ込まない主因
+            aiBehavior = (Math.random() < 0.5) ? 'spaceL' : 'spaceR';
+          } else if (aDist > 2.8) {
+            aiBehavior = 'approach';
+          } else if (!playerThrown && inRange && Math.random() < aiPreset.attackChance * 0.5) {
+            // たまに自分から仕掛ける(様子見しすぎ防止)
+            startEnemyAttack();
+          } else {
+            aiBehavior = (roll < 0.5) ? 'spaceL' : 'spaceR';
+          }
+        }
+
+        // --- 移動 ---
+        let aiMoving = false;
+        const eFwd2 = _vecPool.eFwd2.copy(localForward).applyQuaternion(enemy.quaternion);
+        let mvX = 0, mvZ = 0;
+        if (aiBehavior === 'approach' && aDist > 2.4 && Math.abs(aiFaceErr) < 0.7) {
+          mvX = eFwd2.x; mvZ = eFwd2.z; aiMoving = true;
+        } else if (aiBehavior === 'strafeL' || aiBehavior === 'strafeR') {
+          const sgn = (aiBehavior === 'strafeL') ? -1 : 1;
+          mvX = -eFwd2.z * sgn; mvZ = eFwd2.x * sgn; aiMoving = true;
+        } else if (aiBehavior === 'spaceL' || aiBehavior === 'spaceR') {
+          // ★間合い管理: 横に回りつつ理想距離を保つ(近すぎたら下がる/遠すぎたら寄る)
+          const sgn = (aiBehavior === 'spaceL') ? -1 : 1;
+          mvX = -eFwd2.z * sgn; mvZ = eFwd2.x * sgn;
+          const ideal = aiPreset.attackRange + 0.4;
+          if (aDist < ideal - 0.6) { mvX -= eFwd2.x; mvZ -= eFwd2.z; }              // 下がる
+          else if (aDist > ideal + 0.9) { mvX += eFwd2.x * 0.7; mvZ += eFwd2.z * 0.7; } // 寄る
+          aiMoving = true;
+        }
+        if (aiMoving) {
+          const nx = enemy.position.x + mvX * aiPreset.moveSpeed * dt;
+          const nz = enemy.position.z + mvZ * aiPreset.moveSpeed * dt;
+          const newR = Math.hypot(nx, nz);
+          const curR = bodyCenterDist(eBones, enemy);
+          // ★縁の内側 or 中心に近づく方向なら移動OK。
+          //   (制限より外にいる時=投げられ着地後などに、中心へ戻る移動までブロックされて詰むのを防ぐ)
+          if (newR < STUMP_RADIUS - 1.5 || newR < curR) {
+            enemy.position.x = nx; enemy.position.z = nz;
+          } else {
+            aiMoving = false; // 縁の外へ行こうとした時だけ止める(脚も止まる)
+          }
+        }
+        // 敵の歩行アニメ(移動速度に連動=滑らない)
+        const eWalk = eActions[walkAnimName];
+        if (eWalk) {
+          if (aiMoving) {
+            if (!eWalk.isRunning()) eWalk.reset().setLoop(THREE.LoopRepeat).play();
+            eWalk.setEffectiveTimeScale(Math.min(6.5, Math.max(0.8, enemyLocoSpeed * STEP_CADENCE)));
+          } else if (eWalk.isRunning() && !aiAttacking) {
+            eWalk.fadeOut(0.15);
+          }
+        }
+        } // 反応カウンター発動フレームのスキップ閉じ
+      } else if (aiAttacking) {
+        // --- 敵の攻撃モーション進行中 ---
+        const a = aiAtkAction;
+        if (a) {
+          const t = a.time;
+          // ★突進：咬みつく瞬間まで相手に向かって前進(プレイヤーの突進と同じ)
+          //   これがないと1秒の予備動作中に歩いて逃げられて全部スカる
+          if (t < BITE_LOCK_TIME && aDist > 1.7) {
+            // ★追尾旋回を強化(逃げにくい=当たりやすい)
+            const eFwdC = _vecPool.eFwdC.copy(localForward).applyQuaternion(enemy.quaternion);
+            const curA = Math.atan2(eFwdC.x, eFwdC.z);
+            const tgtA = Math.atan2(aDx, aDz);
+            let dA = tgtA - curA;
+            while (dA > Math.PI) dA -= 2 * Math.PI;
+            while (dA < -Math.PI) dA += 2 * Math.PI;
+            const mT = aiPreset.turnRate * 0.85 * dt;
+            enemy.rotation.y += Math.max(-mT, Math.min(mT, dA));
+            // 前進
+            const eF = _vecPool.eF.copy(localForward).applyQuaternion(enemy.quaternion);
+            const nx2 = enemy.position.x + eF.x * aiPreset.chargeSpeed * dt;
+            const nz2 = enemy.position.z + eF.z * aiPreset.chargeSpeed * dt;
+            const nR2 = Math.hypot(nx2, nz2), cR2 = bodyCenterDist(eBones, enemy);
+            if (nR2 < STUMP_RADIUS - 1.2 || nR2 < cR2) {
+              enemy.position.x = nx2;
+              enemy.position.z = nz2;
+            }
+            // ★突進中も脚を動かす(攻撃アニメは脚を含まない=歩行併用で滑り防止)
+            const ewC = eActions[walkAnimName];
+            if (ewC) {
+              if (!ewC.isRunning()) ewC.reset().setLoop(THREE.LoopRepeat).play();
+              ewC.setEffectiveTimeScale(Math.min(7.5, Math.max(2.0, aiPreset.chargeSpeed * STEP_CADENCE)));
+            }
+          } else {
+            // 突進が終わったら脚を止める
+            const ewC = eActions[walkAnimName];
+            if (ewC && ewC.isRunning()) ewC.fadeOut(0.2);
+          }
+          // 咬み窓(f22-28): 相殺判定用フラグ
+          enemyAttackActive = (t >= 22 / 24 && t <= 28 / 24);
+          // 咬み判定(1回だけ)
+          if (!aiBiteResolved && t >= BITE_LOCK_TIME) {
+            aiBiteResolved = true;
+            player.updateMatrixWorld(true);
+            enemy.updateMatrixWorld(true);
+            const eHit = findClosestHit(eBones, BITE_BONES, pBones);
+            if (eHit.dist <= (guardHeld ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE) && !playerThrown && state !== STATE.CARRYING && enemyState === ENEMY_STATE.FREE) {
+              {
+                if (state === STATE.STANCE || state === STATE.BITING) {
+                  // ★掴み vs 掴み → 組み合い(鍔迫り合い)演出へ
+                  startGrapple();
+                } else {
+                if (guardHeld) addDebugLog('🦾 敵がガードを掴んで崩した！');
+                // 被弾！投げられる(★掴み〉ガード: ガード中でも掴みは通る)
+                addDebugLog(`💥 敵の噛みつき命中！部位:${eHit.part}`);
+                setStatus('💥 掴まれた！', true);
+                playerThrown = true;
+                state = STATE.BITING; // 入力はplayerThrownゲートで停止
+                const thDir = _vecPool.thDir.copy(localForward).applyQuaternion(enemy.quaternion);
+                pThrowStartPos = player.position.clone();
+                pThrowTargetPos = new THREE.Vector3(
+                  player.position.x + thDir.x * aiPreset.kb,
+                  0,
+                  player.position.z + thDir.z * aiPreset.kb,
+                );
+                pThrowStartTime = performance.now() / 1000;
+                const r = pActions[reactAnimName];
+                if (r) {
+                  if (pCurrent) pCurrent.fadeOut(0.1);
+                  r.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+                  r.clampWhenFinished = true;
+                  pCurrent = r;
+                }
+                } // 掴みvs掴みでない場合のelse閉じ
+              }
+            } else if (eHit.dist > BITE_CONNECT_RANGE) {
+              addDebugLog(`🤖 敵の攻撃スカり(距離${eHit.dist.toFixed(2)})`);
+            }
+          }
+          // アニメ終了で攻撃解除
+          if (!a.isRunning() && t > 1) {
+            cancelEnemyAttack();
+          }
+        } else {
+          aiAttacking = false;
+        }
+      } else if (aiGuarding) {
+        // --- 敵ガード中：その場で構えつつプレイヤーを向く。一定時間で解除 ---
+        aiGuardTimer += dt;
+        if (aDist > 0.01) {
+          const ef = _vecPool.ef.copy(localForward).applyQuaternion(enemy.quaternion);
+          const ca = Math.atan2(ef.x, ef.z);
+          const ta = Math.atan2(aDx, aDz);
+          let da = ta - ca;
+          while (da > Math.PI) da -= 2 * Math.PI;
+          while (da < -Math.PI) da += 2 * Math.PI;
+          const mt = aiPreset.turnRate * 0.5 * dt;
+          enemy.rotation.y += Math.max(-mt, Math.min(mt, da));
+        }
+        if (aiGuardTimer > 0.85) aiGuarding = false;
+      } else if (aiPushing) {
+        // --- 敵プッシュ中：踏み込んでプレイヤーを押す ---
+        aiPushTimer += dt;
+        // 前兆(E_PUSH_STARTまで)は黄色く光って溜め、そこから踏み込んで当てる=ガードやかわしの猶予
+        if (aiPushTimer >= E_PUSH_START && aiPushTimer < E_PUSH_END) {
+          const ef = _vecPool.ef.copy(localForward).applyQuaternion(enemy.quaternion);
+          const nx = enemy.position.x + ef.x * PUSH_LUNGE_SPEED * dt;
+          const nz = enemy.position.z + ef.z * PUSH_LUNGE_SPEED * dt;
+          if (Math.hypot(nx, nz) < STUMP_RADIUS - 0.3) { enemy.position.x = nx; enemy.position.z = nz; }
+        }
+        if (!aiPushResolved && aiPushTimer >= E_PUSH_START && aiPushTimer <= E_PUSH_END && !playerThrown && !gameOver) {
+          const pdx = player.position.x - enemy.position.x;
+          const pdz = player.position.z - enemy.position.z;
+          const pd = Math.hypot(pdx, pdz);
+          const ef = _vecPool.ef.copy(localForward).applyQuaternion(enemy.quaternion);
+          const facing = pd > 0.01 ? (ef.x * pdx + ef.z * pdz) / pd : 0;
+          if (pd <= PUSH_RANGE && facing > 0.5) {
+            aiPushResolved = true;
+            const dx = pd > 0.01 ? pdx / pd : ef.x;
+            const dz = pd > 0.01 ? pdz / pd : ef.z;
+            if (guardHeld) {
+              // ★ガード〉プッシュ : プレイヤーのガードで敵を大きく弾き返し+スタン(反撃の大チャンス)
+              const back = _vecPool.back.copy(localForward).applyQuaternion(enemy.quaternion);
+              enemy.position.addScaledVector(back, -6.0); // 大きく弾き返す(場外チャンス大)
+              stunEnemy(1.5);                              // 敵をスタン=反撃の大チャンス
+              triggerClashEffect();
+              stamina = Math.min(MAX_STAMINA, stamina + 25); // ガード成功報酬(スタミナ回復)
+              addDebugLog('🛡️ 敵プッシュをガードで弾き返し+スタン！');
+              setStatus('🛡️ ガードで弾き返した！相手スタン！反撃だ！', true);
+              if (bodyCenterDist(eBones, enemy) > STUMP_RADIUS && enemyState === ENEMY_STATE.FREE && !gameOver) triggerFall(enemy, false);
+            } else if (state === STATE.STANCE || state === STATE.BITING) {
+              // ★プッシュ〉掴み : 掴もうとするプレイヤーを突き飛ばす(場外の危機!)
+              player.position.x += dx * 6.0;
+              player.position.z += dz * 6.0;
+              joyStanceActive = false;
+              stunPlayer(1.3);                  // ★掴みを潰されてスタン
+              triggerClashEffect();
+              setStatus('💥 突き飛ばされてスタン！大ピンチ！', false);
+              addDebugLog('🤖💥 敵プッシュが掴みを潰した+スタン');
+              if (bodyCenterDist(pBones, player) > STUMP_RADIUS && !gameOver) triggerFall(player, true);
+            } else if (state === STATE.PUSHING) {
+              // ★プッシュ vs プッシュ → 正面激突！両者ちょっと吹っ飛ぶ
+              const pb = _vecPool.pb.copy(localForward).applyQuaternion(player.quaternion);
+              player.position.addScaledVector(pb, -2.0);
+              const eback = _vecPool.eback.copy(localForward).applyQuaternion(enemy.quaternion);
+              enemy.position.addScaledVector(eback, -2.0);
+              state = STATE.FREE;
+              if (pCurrent) pCurrent.setEffectiveTimeScale(1.0);
+              aiPushing = false; aiPushResolved = true;
+              triggerClashEffect();
+              addDebugLog('⚔ プッシュ激突！両者吹っ飛び');
+              setStatus('⚔ プッシュ激突！', true);
+            } else {
+              // 通常ヒット: 押込み度合い(aiPushPower)で吹っ飛び距離が変化
+              const _kl = 2.5 + aiPushPower * 8; // (2.5〜10.5)
+              player.position.x += dx * _kl;
+              player.position.z += dz * _kl;
+              addDebugLog(`🤖👊 敵プッシュ命中(威力${Math.round(aiPushPower*100)})`);
+              if (bodyCenterDist(pBones, player) > STUMP_RADIUS && !gameOver) triggerFall(player, true);
+            }
+          }
+        }
+        if (aiPushTimer >= E_PUSH_DURATION) { aiPushing = false; aiPushResolved = false; }
+      }
+      // 安全弁：AIが縁から出てしまったら場外(敵の自滅=プレイヤー勝ち)
+      const eDistC = bodyCenterDist(eBones, enemy);
+      if (eDistC > STUMP_RADIUS && enemyState === ENEMY_STATE.FREE && !gameOver) {
+        triggerFall(enemy, false);
+      }
+    }
+
+    // ========== プレイヤー被弾飛行(投げられ中) ==========
+    if (playerThrown && pThrowStartPos && pThrowTargetPos) {
+      const nowS = performance.now() / 1000;
+      const tP = Math.min(1, (nowS - pThrowStartTime) / THROW_DURATION);
+      const eT = 1 - (1 - tP) * (1 - tP);
+      player.position.x = pThrowStartPos.x + (pThrowTargetPos.x - pThrowStartPos.x) * eT;
+      player.position.z = pThrowStartPos.z + (pThrowTargetPos.z - pThrowStartPos.z) * eT;
+      player.position.y = 1.5 * Math.sin(Math.PI * eT);
+      // 飛行中に場外へ出たら落下負け
+      const pFly = bodyCenterDist(pBones, player);
+      if (pFly > STUMP_RADIUS && !gameOver) {
+        fallVelY = 0;
+        triggerFall(player, true);
+        pThrowStartPos = null;
+        pThrowTargetPos = null;
+      }
+    }
+
+    // ========== 切り株の縁：どの状態でも中心が場外に出たら落下(常時・確実に) ==========
+    //   移動ブロックのチェックはFREE系のみだったので、掴み/プッシュ/硬直中に縁外へ出ても
+    //   落ちないケースがあった。ここで全状態を漏れなく拾う。
+    if (!gameOver && !grappleActive && player && enemy) {
+      // プレイヤー: 投げられ飛行中(playerThrown)は専用処理に任せる。それ以外は全状態チェック
+      if (!playerThrown) {
+        const _pd = bodyCenterDist(pBones, player);
+        if (_pd > STUMP_RADIUS) triggerFall(player, true);
+      }
+      // 敵: FREE時のみ(REACTINGの投げ飛行・GRIPPEDの運搬中は専用処理に任せる)
+      if (!gameOver && enemyState === ENEMY_STATE.FREE) {
+        const _ed = bodyCenterDist(eBones, enemy);
+        if (_ed > STUMP_RADIUS) triggerFall(enemy, false);
+      }
+    }
+
+    // --- 通常時のアニメーション（歩く/止まる。攻撃中は上で再生済みのモーションに任せる） ---
+    if (state === STATE.FREE) {
+      if (moving) {
+        // ★横移動なら横歩き専用アニメ、前後なら通常歩行(後退は逆再生)
+        const _useStrafe = moveStrafe && !moveFwd && !moveBack && strafeAnimName && pActions[strafeAnimName];
+        const _anim = _useStrafe ? strafeAnimName : walkAnimName;
+        playP(_anim, { speed: 1.4 }); // 開始(再生中なら何もしない)
+        const _w = pActions[_anim];
+        if (_w) {
+          // ★脚の回転速度=実際の移動速度に連動(足が滑らない)。方向で符号を変える
+          const _cad = Math.min(6.5, Math.max(0.8, locoSpeed * STEP_CADENCE));
+          let _sp = _cad; // 前進(既定)
+          if (_useStrafe) {
+            _sp = (keys.KeyA || keys.ArrowLeft) && !(keys.KeyD || keys.ArrowRight) ? -_cad : _cad;
+          } else if (moveBack && !moveFwd) {
+            _sp = -_cad; // 後退=逆再生
+          }
+          _w.setEffectiveTimeScale(_sp);
+        }
+      } else stopP();
+    }
+
+    // --- STANCE中：脚アニメが止まってたら再開（上半身は構えポーズのまま） ---
+    // Attack_GrabThrow=Head/Mandible/Rootのみ、Walk=Leg IKのみ、なので同時再生で衝突しない
+    if (state === STATE.STANCE || state === STATE.CARRYING) {
+      const _useStrafe = moveStrafe && !moveFwd && !moveBack && strafeAnimName && pActions[strafeAnimName];
+      const locoName = _useStrafe ? strafeAnimName : walkAnimName;
+      const loco = pActions[locoName];
+      const other = pActions[_useStrafe ? walkAnimName : strafeAnimName];
+      if (loco) {
+        if (moving) {
+          if (other && other.isRunning()) other.fadeOut(0.15); // 反対のロコモーションを止める
+          if (!loco.isRunning()) {
+            loco.reset().setLoop(THREE.LoopRepeat).setEffectiveTimeScale(1.0).play();
+          }
+          const _cad = Math.min(6.5, Math.max(0.8, locoSpeed * STEP_CADENCE));
+          let _sp = _cad;
+          if (_useStrafe) _sp = (keys.KeyA || keys.ArrowLeft) && !(keys.KeyD || keys.ArrowRight) ? -_cad : _cad;
+          else if (moveBack && !moveFwd) _sp = -_cad;
+          loco.setEffectiveTimeScale(_sp);
+        } else {
+          if (loco.isRunning()) loco.fadeOut(0.15);
+          if (other && other.isRunning()) other.fadeOut(0.15);
+        }
+      }
+    }
+
+    // ★歩行の上下バウンド(床を踏んで歩いてる感)。移動速度に応じて周期が変わる=歩調と一致
+    {
+      const _target = (moving && !gameOver && !playerThrown) ? 1 : 0;
+      bobBlend += (_target - bobBlend) * Math.min(1, dt * 10); // 発停を滑らかに
+      const _cyclesPerSec = (locoSpeed * STEP_CADENCE) / 1.375; // 脚の周期/秒(歩調)
+      walkBobPhase += _cyclesPerSec * dt;
+      if (!gameOver && !playerThrown) {
+        // 1歩ごとに体が沈んで踏ん張る(1周期に2歩=abs sinで2バウンド)
+        const _bob = Math.abs(Math.sin(walkBobPhase * Math.PI * 2)) * BOB_AMP;
+        player.position.y = _bob * bobBlend;
+      }
+    }
+    // ★アイドル時の微妙な揺れ(生きてる感=固まって見えない/常時ガン見を和らげる)
+    if (!gameOver && !playerThrown) {
+      if (state === STATE.FREE && !moving) {
+        const _sw = performance.now() * 0.0016;
+        player.rotation.z = Math.sin(_sw) * 0.03;
+        player.rotation.x = Math.sin(_sw * 0.63 + 1.3) * 0.02;
+      } else {
+        player.rotation.z *= 0.86;
+        player.rotation.x *= 0.86;
+      }
+    }
+
+    // ================= カメラ：クワガタの後ろ斜め上 =================
+    // プレイヤーの背後（大顎と逆側）・高い位置から見下ろす三人称視点（斜め上）
+    const backOffset = _vecPool.backOffset.copy(localForward).multiplyScalar(-13);
+    backOffset.y = 8.5;
+    backOffset.applyQuaternion(player.quaternion);
+    const camTarget = player.position.clone().add(backOffset);
+    camera.position.lerp(camTarget, 0.08);
+    // 少し前方（大顎が向いている方向＝相手がいる方向）を見下ろす
+    const lookAhead = _vecPool.lookAhead.copy(localForward).multiplyScalar(4).applyQuaternion(player.quaternion);
+    camera.lookAt(
+      player.position.x + lookAhead.x,
+      player.position.y + 1.0,
+      player.position.z + lookAhead.z
+    );
+    // カメラシェイク（正面激突後の残余）
+    if (shakeTime > 0) {
+      shakeTime -= dt;
+      camera.position.x += (Math.random() - 0.5) * shakeIntensity;
+      camera.position.y += (Math.random() - 0.5) * shakeIntensity;
+      camera.position.z += (Math.random() - 0.5) * shakeIntensity;
+      shakeIntensity *= 0.90; // 減衰
+    }
+  }
+
+  // ヒットストップ中はmixerを止めて時間を凍結（インパクト強調）
+  if (hitStopTime > 0) {
+    hitStopTime -= dt;
+  } else {
+    if (playerMixer) playerMixer.update(dt);
+    if (enemyMixer)  enemyMixer.update(dt);
+  }
+  updateClashEffects(dt); // 衝突エフェクトはヒットストップ中も動かす
+  // ★CARRYING中：攻撃アニメの「突進でRootが前方+5.5に伸びた状態」を打ち消す。
+  //   これをしないと体だけ前に伸びて脚がストレッチされた見た目になる。
+  //   Rootをゼロに戻せば体が脚の真上に戻り、歩行アニメも自然に見える。
+  if (state === STATE.CARRYING && player) {
+    const _rootB = player.getObjectByName('Root');
+    if (_rootB) _rootB.position.set(0, 0, 0);
+    player.updateMatrixWorld(true);
+  }
+
+  // ========== 場外落下アニメーション ==========
+  if (gameOver && fallingObj) {
+    fallVelY -= 25 * dt; // 重力(強め=ゲーム的な落下感)
+    fallingObj.position.y += fallVelY * dt;
+    fallingObj.rotation.x += 1.5 * dt; // クルクル回りながら落ちる
+    if (fallingObj.position.y < -30) fallingObj = null; // 十分落ちたら停止
+  }
+
+  // ========== スタミナ更新 ==========
+  {
+    let drain = 0;
+    if (state === STATE.STANCE && (keys.KeyW || keys.ArrowUp)) drain += STAM_DRAIN_CHARGE;
+    else if (state === STATE.STANCE) drain += STAM_DRAIN_STANCE;
+    if (guardHeld) drain += STAM_DRAIN_GUARD;
+    if (state === STATE.CARRYING) drain += STAM_DRAIN_CARRY;
+    if (drain > 0) {
+      stamina -= drain * dt;
+    } else if (state === STATE.FREE && !guardHeld) {
+      stamina += STAM_REGEN * dt;
+    }
+    stamina = Math.max(0, Math.min(MAX_STAMINA, stamina));
+    // ★スタミナを消耗し切ったらスタン(構え/突進/ガードで空になった時)
+    if (stamina <= 0 && drain > 0 && state !== STATE.STUN && state !== STATE.CARRYING && !playerThrown && idleReady) {
+      stunPlayer();
+    }
+    // スタミナ0でガード強制解除
+    if (stamina <= 0 && guardHeld) {
+      guardHeld = false;
+      addDebugLog('💦 スタミナ切れ！ガード解除');
+    }
+    // スタミナバーUI更新
+    const staminaFill = staminaFillEl;
+    if (staminaFill) {
+      const pct = (stamina / MAX_STAMINA) * 100;
+      staminaFill.style.width = pct + '%';
+      staminaFill.classList.toggle('medium', pct <= 50 && pct > 25);
+      staminaFill.classList.toggle('low', pct <= 25);
+    }
+  }
+
+  // タッチボタンのactive状態同期（見た目でガード/ロックオン中かわかる）
+  const _lockBtnEl = lockonBtn;
+  if (_lockBtnEl) _lockBtnEl.classList.toggle('active', lockOnActive);
+  const _guardBtnEl = guardBtnCacheEl;
+  if (_guardBtnEl) _guardBtnEl.classList.toggle('active', guardHeld);
+
+  // ===== 攻撃=赤 / 防御=青 のハイライト(自分と相手、三すくみを読みやすく) =====
+  if (grappleActive) {
+    const _gi = 1.0 + Math.abs(Math.sin(performance.now() * 0.02)) * 0.6; // 組み合いは両者ギラつく黄色
+    setGlow('player', GRAB_GLOW, _gi);
+    setGlow('enemy', GRAB_GLOW, _gi);
+  } else {
+    const _pulse = 0.45 + Math.abs(Math.sin(performance.now() * 0.012)) * 0.55;
+    if (player) {
+      let col = 0, inten = 0;
+      if (!gameOver) {
+        if (state === STATE.STUN) { col = STUN_GLOW; inten = _pulse; }                          // スタン=白くぼんやり(無防備)
+        else if (playerThrown) { col = 0; inten = 0; }                                           // 投げられ中は光らせない
+        else if (state === STATE.PUSH_CHARGE) { col = PUSH_GLOW; inten = 0.5 + Math.min(1, pushChargeTime / PUSH_MAX_CHARGE) * 1.7; } // プッシュ溜め=真っ赤
+        else if (state === STATE.PUSHING) { col = PUSH_GLOW; inten = 1.6; }                      // プッシュ=真っ赤
+        else if (state === STATE.STANCE || state === STATE.BITING) { col = GRAB_GLOW; inten = 1.1; } // 掴み構え/噛みつき=黄
+        else if (guardHeld) { col = GUARD_GLOW; inten = 0.95; }                                  // ガード=青
+      }
+      setGlow('player', col, inten);
+    }
+    if (enemy) {
+      let col = 0, inten = 0;
+      if (!gameOver) {
+        if (aiStunned) { col = STUN_GLOW; inten = _pulse; }                                      // 敵スタン=白くぼんやり
+        else if (enemyState === ENEMY_STATE.FREE) {                                              // 掴まれ/投げられ中は光らせない
+          if (aiPushing) { col = PUSH_GLOW; inten = 1.6; }                                       // 敵プッシュ=真っ赤
+          else if (aiAttacking) { col = GRAB_GLOW; inten = 1.1; }                                // 敵掴み=黄
+          else if (aiGuarding) { col = GUARD_GLOW; inten = 0.95; }                               // 敵ガード=青
+        }
+      }
+      setGlow('enemy', col, inten);
+    }
+  }
+
+  // コライダー可視化を毎フレーム更新（ボーンに追従）
+  updateColliderMeshes();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+addDebugLog('💡 相手(赤)に近づいて攻撃ボタン');
+addDebugLog('ℹ️ 相手はAIなし。Reactアニメで位置が変わるだけ');
+</script>
+
+</body>
+</html>
