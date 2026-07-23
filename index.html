@@ -12,6 +12,7 @@
 <meta name="theme-color" content="#12160d">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="クワガタ">
 <style>
@@ -505,6 +506,56 @@ window.addEventListener('keydown', e => {
   }
 });
 addDebugLog('🟢 起動');
+
+// ★言語自動切替: 日本語ブラウザ=日本語 / それ以外=英語
+const _qlang = (location.search.match(/[?&]lang=(en|ja)/) || [])[1];
+const IS_EN = _qlang ? _qlang === 'en' : !((navigator.language || '').toLowerCase().startsWith('ja'));
+const T_STATUS = {
+  '相手に近づいて攻撃しよう！': 'Get close and attack!',
+  '構え中！離すと噛む': 'Stance! Release to bite',
+  '突進中！': 'Lunging!',
+  '噛みつき！': 'Bite!',
+  'がっちり噛みついた！': 'Got a solid grip!',
+  'スカった…': 'Missed...',
+  'スタミナ不足…': 'Not enough stamina...',
+  '復帰！': 'Back on your feet!',
+  '運搬中！スティックで狙って投げる': 'Carrying! Aim with the stick & throw',
+  '⚔ プッシュ激突！': '⚔ Push clash!',
+  '⚔ 互角の押し合い！': '⚔ Dead-even shoving!',
+  '⚔ 組み合い！大顎の押し合い！': '⚔ Grapple! Mandible lock!',
+  '⚔ 組み合い決着！仕切り直し！': '⚔ Grapple over! Reset!',
+  '❌ ガードされた…吹っ飛んでスタン！大ピンチ！': '❌ Blocked... knocked away & stunned!',
+  '🌀 投げられた！！': '🌀 Thrown!!',
+  '🎯 狙い中…離すと投げる！': '🎯 Aiming... release to throw!',
+  '👊 溜め中…離して発射！': '👊 Charging... release to push!',
+  '💥 チャージ勝ち！押し勝った！': '💥 Charge win! Pushed through!',
+  '💥 チャージ負け…押し負けた！': '💥 Charge lost... pushed back!',
+  '💥 プッシュに突き飛ばされた…！': '💥 Shoved away by a push...!',
+  '💥 押し勝ち！突き飛ばした！': '💥 Push wins! Shoved them back!',
+  '💥 突き飛ばされてスタン！大ピンチ！': '💥 Shoved & stunned! Big trouble!',
+  '💥 突き飛ばしてスタン！反撃だ！': '💥 Shoved & stunned them! Strike now!',
+  '💦 スタミナ切れ…': '💦 Out of stamina...',
+  '💪 脱出成功！反撃チャンス！': '💪 Escaped! Counter chance!',
+  '💫 スタン！無防備！': '💫 Stunned! Defenseless!',
+  '💫 相手がスタン！攻めるチャンス！': '💫 Rival stunned! Attack now!',
+  '🛡️ ガードで弾き返した！相手スタン！反撃だ！': '🛡️ Parried! Rival stunned! Counter!',
+  '💀 場外負け…': '💀 RING OUT... You lose',
+  '🏆 勝利！！': '🏆 VICTORY!!',
+};
+function trStatus(text) {
+  if (!IS_EN || !text) return text;
+  if (T_STATUS[text]) return T_STATUS[text];
+  let m;
+  m = text.match(/^🆘 連打で脱出！\((\d+)\/(\d+)\)$/);
+  if (m) return `🆘 MASH to escape! (${m[1]}/${m[2]})`;
+  m = text.match(/^🆘 運ばれてる！ボタン連打で脱出！\(0\/(\d+)\)$/);
+  if (m) return `🆘 Carried! MASH buttons to escape! (0/${m[1]})`;
+  m = text.match(/^👊 プッシュ 威力(\d+)%！$/);
+  if (m) return `👊 Push! Power ${m[1]}%!`;
+  m = text.match(/^🧠 相手はあなたの癖を学習済み\(Lv(\d+)\)…$/);
+  if (m) return `🧠 Your rival has learned your habits (Lv${m[1]})...`;
+  return text;
+}
 
 // ========== シーン ==========
 const scene = new THREE.Scene();
@@ -1912,55 +1963,6 @@ const statusEl = document.getElementById('status');
 // 毎フレームのDOM取得を避けるためキャッシュ(ループ外で1回だけ)
 const staminaFillEl = document.getElementById('staminaFill');
 const guardBtnCacheEl = document.getElementById('guardBtn');
-// ★言語自動切替: 日本語ブラウザ=日本語 / それ以外=英語
-const _qlang = (location.search.match(/[?&]lang=(en|ja)/) || [])[1];
-const IS_EN = _qlang ? _qlang === 'en' : !((navigator.language || '').toLowerCase().startsWith('ja'));
-const T_STATUS = {
-  '相手に近づいて攻撃しよう！': 'Get close and attack!',
-  '構え中！離すと噛む': 'Stance! Release to bite',
-  '突進中！': 'Lunging!',
-  '噛みつき！': 'Bite!',
-  'がっちり噛みついた！': 'Got a solid grip!',
-  'スカった…': 'Missed...',
-  'スタミナ不足…': 'Not enough stamina...',
-  '復帰！': 'Back on your feet!',
-  '運搬中！スティックで狙って投げる': 'Carrying! Aim with the stick & throw',
-  '⚔ プッシュ激突！': '⚔ Push clash!',
-  '⚔ 互角の押し合い！': '⚔ Dead-even shoving!',
-  '⚔ 組み合い！大顎の押し合い！': '⚔ Grapple! Mandible lock!',
-  '⚔ 組み合い決着！仕切り直し！': '⚔ Grapple over! Reset!',
-  '❌ ガードされた…吹っ飛んでスタン！大ピンチ！': '❌ Blocked... knocked away & stunned!',
-  '🌀 投げられた！！': '🌀 Thrown!!',
-  '🎯 狙い中…離すと投げる！': '🎯 Aiming... release to throw!',
-  '👊 溜め中…離して発射！': '👊 Charging... release to push!',
-  '💥 チャージ勝ち！押し勝った！': '💥 Charge win! Pushed through!',
-  '💥 チャージ負け…押し負けた！': '💥 Charge lost... pushed back!',
-  '💥 プッシュに突き飛ばされた…！': '💥 Shoved away by a push...!',
-  '💥 押し勝ち！突き飛ばした！': '💥 Push wins! Shoved them back!',
-  '💥 突き飛ばされてスタン！大ピンチ！': '💥 Shoved & stunned! Big trouble!',
-  '💥 突き飛ばしてスタン！反撃だ！': '💥 Shoved & stunned them! Strike now!',
-  '💦 スタミナ切れ…': '💦 Out of stamina...',
-  '💪 脱出成功！反撃チャンス！': '💪 Escaped! Counter chance!',
-  '💫 スタン！無防備！': '💫 Stunned! Defenseless!',
-  '💫 相手がスタン！攻めるチャンス！': '💫 Rival stunned! Attack now!',
-  '🛡️ ガードで弾き返した！相手スタン！反撃だ！': '🛡️ Parried! Rival stunned! Counter!',
-  '💀 場外負け…': '💀 RING OUT... You lose',
-  '🏆 勝利！！': '🏆 VICTORY!!',
-};
-function trStatus(text) {
-  if (!IS_EN || !text) return text;
-  if (T_STATUS[text]) return T_STATUS[text];
-  let m;
-  m = text.match(/^🆘 連打で脱出！\((\d+)\/(\d+)\)$/);
-  if (m) return `🆘 MASH to escape! (${m[1]}/${m[2]})`;
-  m = text.match(/^🆘 運ばれてる！ボタン連打で脱出！\(0\/(\d+)\)$/);
-  if (m) return `🆘 Carried! MASH buttons to escape! (0/${m[1]})`;
-  m = text.match(/^👊 プッシュ 威力(\d+)%！$/);
-  if (m) return `👊 Push! Power ${m[1]}%!`;
-  m = text.match(/^🧠 相手はあなたの癖を学習済み\(Lv(\d+)\)…$/);
-  if (m) return `🧠 Your rival has learned your habits (Lv${m[1]})...`;
-  return text;
-}
 function setStatus(text, hot) {
   statusEl.textContent = trStatus(text);
   statusEl.classList.toggle('grabbing', !!hot);
