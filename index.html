@@ -23,7 +23,7 @@
   }
   body {
     margin: 0; overflow: hidden; background: #1a1a1a;
-    font-family: 'Zen Kaku Gothic New', 'Arial', sans-serif; color: #fff;
+    font-family: 'Reggae One', 'Zen Kaku Gothic New', 'Arial', sans-serif; color: #fff;
     width: 100%; height: 100vh;
   }
   canvas { display: block; }
@@ -271,7 +271,7 @@
   .ctrl-row { font-size: 15px; color: #ddd; text-align: center; margin: 6px 0; }
   .ctrl-row kbd {
     background: rgba(255,220,150,0.15); border: 1px solid rgba(255,200,100,0.5);
-    border-radius: 5px; padding: 1px 7px; font-family: 'Zen Kaku Gothic New', monospace;
+    border-radius: 5px; padding: 1px 7px; font-family: 'Reggae One', monospace;
     font-size: 13px; font-weight: 700; color: #ffe0a0; margin: 0 1px;
   }
   .tw-red { color: #ff6a5a; font-weight: bold; }
@@ -415,6 +415,19 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <button id="learnResetBtn" style="margin-top:14px;background:none;border:1px solid rgba(255,255,255,0.3);color:#9a9a9a;font-size:12px;padding:6px 16px;border-radius:8px;cursor:pointer;">🧠 学習データをリセット</button>
+  <!-- 広告(タイトル画面のみ表示・ゲーム中は非表示 / 端末でPC枠・スマホ枠を自動出し分け) -->
+  <div style="margin-top:16px;display:flex;justify-content:center;">
+<!-- admax -->
+<script>
+(function () {
+  var isSP = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent);
+  var admaxId = isSP ? '05aa4ff1b6a8b8072d51769c31498a66' : '78cf3d2f053322fe5b8929e27e44fcc7';
+  document.write('<scr' + 'ipt src="https://adm.shinobi.jp/s/' + admaxId + '"></scr' + 'ipt>');
+})();
+</script>
+<!-- admax -->
+  </div>
+  <div id="adPrivacy" style="margin-top:8px;font-size:10px;color:#8a8474;">広告配信のためにCookie(クッキー)を使用することがあります</div>
 </div>
 
 <div id="loading">
@@ -975,7 +988,7 @@ function triggerFall(obj, isPlayerFalling) {
   aiLearn.matches++; saveAiLearn(); // ★学習: 対戦数を記録(次からさらに強く)
   addDebugLog(isPlayerFalling ? '💀 場外に落ちた…' : '🏆 相手を場外に落とした！');
   setStatus(isPlayerFalling ? '💀 場外！' : '🏆 リングアウト！', true);
-  setTimeout(() => showResult(isPlayerFalling ? '💀 場外負け…' : '🏆 勝利！！', !isPlayerFalling), 1000);
+  setTimeout(() => showResult(trStatus(isPlayerFalling ? '💀 場外負け…' : '🏆 勝利！！'), !isPlayerFalling), 1000);
 }
 function showResult(text, won) {
   const ov = document.getElementById('resultOverlay');
@@ -1169,7 +1182,7 @@ document.querySelectorAll('.diffBtn').forEach(btn => {
       e.preventDefault(); e.stopPropagation();
       aiLearn = { grab: 0, push: 0, guard: 0, matches: 0, ctPush: 0, ctGuard: 0, ctGrab: 0 };
       try { localStorage.removeItem(AI_LEARN_KEY); } catch (er) {}
-      _lrBtn.textContent = '🧠 リセットしました！';
+      _lrBtn.textContent = IS_EN ? '🧠 AI memory cleared!' : '🧠 リセットしました！';
     };
     _lrBtn.addEventListener('click', _doReset);
     _lrBtn.addEventListener('touchstart', _doReset);
@@ -1177,6 +1190,50 @@ document.querySelectorAll('.diffBtn').forEach(btn => {
   const _dtEl = document.getElementById('diffTitle');
   const _lv0 = aiLearnLevel();
   if (_dtEl && _lv0 > 0) _dtEl.textContent = `相手の強さを選んでスタート（🧠学習Lv${_lv0}）`;
+}
+// ★英語UI: 日本語圏以外のブラウザでは画面テキストを全部英語に
+if (IS_EN) {
+  document.title = 'Stag Beetle Battle';
+  const _t = (sel, txt) => { const el = document.querySelector(sel); if (el) el.textContent = txt; };
+  _t('#titleMain', '🪲 STAG BEETLE BATTLE');
+  _t('#titleSub', 'Grapple on the tree stump — shove your rival off the edge!');
+  const _boxes = document.querySelectorAll('#diffOverlay .threeway-box');
+  if (_boxes[0]) _boxes[0].innerHTML = '<div class="tw-head">🎯 The Triangle (moves glow by color)</div>'
+    + '<div class="tw-row"><span class="tw-red">🔴 GRAB</span> breaks <span class="tw-blue">🔵 GUARD</span></div>'
+    + '<div class="tw-row"><span class="tw-blue">🔵 GUARD</span> deflects <span class="tw-yellow">🟡 PUSH</span></div>'
+    + '<div class="tw-row"><span class="tw-yellow">🟡 PUSH</span> crushes <span class="tw-red">🔴 GRAB</span></div>'
+    + '<div class="tw-note">Watch your rival\'s glow and pick the winning move!</div>';
+  if (_boxes[1]) _boxes[1].innerHTML = '<div class="tw-head">🎮 Controls</div>'
+    + '<div class="ctrl-row">🕹️ Move: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Arrows (on-screen pad on mobile)</div>'
+    + '<div class="ctrl-row"><span class="tw-red">🔴GRAB</span> hold <kbd>Space</kbd> → release to throw&nbsp;&nbsp;<span class="tw-yellow">🟡PUSH</span> hold <kbd>E</kbd> to charge</div>'
+    + '<div class="ctrl-row"><span class="tw-blue">🔵GUARD</span> <kbd>Shift</kbd>&nbsp;&nbsp;🎯Lock-on <kbd>Q</kbd>&nbsp;&nbsp;(on-screen buttons on mobile)</div>';
+  const _lvE = aiLearnLevel();
+  _t('#diffTitle', _lvE > 0 ? `Choose your rival & START (🧠 AI Lv${_lvE})` : 'Choose your rival & START');
+  const _dNames = { '1': '🐣 EASY', '2': '⚔️ NORMAL', '3': '🔥 HARD', '4': '💀 INSANE' };
+  document.querySelectorAll('.diffBtn').forEach(b => { if (_dNames[b.dataset.level]) b.textContent = _dNames[b.dataset.level]; });
+  _t('#learnResetBtn', '🧠 Reset AI memory');
+  _t('#adPrivacy', 'Ads on this page may use cookies.');
+  _t('#restartBtn', 'REMATCH!');
+  _t('#clashText', '⚔ HEAD-ON CLASH!!!');
+  _t('#status', 'Get close and attack!');
+  const _ldEl = document.querySelector('#loading div');
+  if (_ldEl) _ldEl.textContent = '🪲 Loading...';
+  const _infoEl = document.getElementById('info');
+  if (_infoEl) _infoEl.innerHTML = '<h1>🪲 STAG BEETLE BATTLE</h1>'
+    + '<div><kbd>W</kbd><kbd>↑</kbd> Forward / <kbd>S</kbd><kbd>↓</kbd> Back</div>'
+    + '<div><kbd>A</kbd><kbd>←</kbd> Turn left / <kbd>D</kbd><kbd>→</kbd> Turn right</div>'
+    + '<div>Hold <kbd>Space</kbd> → Stance (jaws open)</div>'
+    + '<div>Stance + <kbd>W</kbd> → Lunge</div>'
+    + '<div>Release <kbd>Space</kbd> → Grab &amp; throw (forward / glows red)</div>'
+    + '<div><kbd>E</kbd> Push (hold to charge = more power / glows yellow / ring-out)</div>'
+    + '<div style="color:#ffcc66;font-size:11px;margin-top:2px;">Triangle: Grab &gt; Guard &gt; Push &gt; Grab</div>'
+    + '<div>📱 Right stick: pull down → grab (pull = jaw open = power)</div>'
+    + '<div><kbd>Shift</kbd> Guard (parry attacks / half speed)</div>'
+    + '<div><kbd>Q</kbd> Lock-on (face rival / A/D to circle)</div>'
+    + '<div><kbd>V</kbd> Show hitboxes</div>';
+  const _lb = document.querySelector('#lockonBtn span'); if (_lb) _lb.textContent = 'LOCK';
+  const _gb = document.querySelector('#guardBtn span'); if (_gb) _gb.textContent = 'GUARD';
+  const _pb = document.querySelector('#pushBtn span'); if (_pb) _pb.textContent = 'PUSH';
 }
 // ===== クラッシュ衝突エフェクト(クワガタ同士の間に出る火花+衝撃リング) =====
 const clashEffects = [];
@@ -1855,8 +1912,57 @@ const statusEl = document.getElementById('status');
 // 毎フレームのDOM取得を避けるためキャッシュ(ループ外で1回だけ)
 const staminaFillEl = document.getElementById('staminaFill');
 const guardBtnCacheEl = document.getElementById('guardBtn');
+// ★言語自動切替: 日本語ブラウザ=日本語 / それ以外=英語
+const _qlang = (location.search.match(/[?&]lang=(en|ja)/) || [])[1];
+const IS_EN = _qlang ? _qlang === 'en' : !((navigator.language || '').toLowerCase().startsWith('ja'));
+const T_STATUS = {
+  '相手に近づいて攻撃しよう！': 'Get close and attack!',
+  '構え中！離すと噛む': 'Stance! Release to bite',
+  '突進中！': 'Lunging!',
+  '噛みつき！': 'Bite!',
+  'がっちり噛みついた！': 'Got a solid grip!',
+  'スカった…': 'Missed...',
+  'スタミナ不足…': 'Not enough stamina...',
+  '復帰！': 'Back on your feet!',
+  '運搬中！スティックで狙って投げる': 'Carrying! Aim with the stick & throw',
+  '⚔ プッシュ激突！': '⚔ Push clash!',
+  '⚔ 互角の押し合い！': '⚔ Dead-even shoving!',
+  '⚔ 組み合い！大顎の押し合い！': '⚔ Grapple! Mandible lock!',
+  '⚔ 組み合い決着！仕切り直し！': '⚔ Grapple over! Reset!',
+  '❌ ガードされた…吹っ飛んでスタン！大ピンチ！': '❌ Blocked... knocked away & stunned!',
+  '🌀 投げられた！！': '🌀 Thrown!!',
+  '🎯 狙い中…離すと投げる！': '🎯 Aiming... release to throw!',
+  '👊 溜め中…離して発射！': '👊 Charging... release to push!',
+  '💥 チャージ勝ち！押し勝った！': '💥 Charge win! Pushed through!',
+  '💥 チャージ負け…押し負けた！': '💥 Charge lost... pushed back!',
+  '💥 プッシュに突き飛ばされた…！': '💥 Shoved away by a push...!',
+  '💥 押し勝ち！突き飛ばした！': '💥 Push wins! Shoved them back!',
+  '💥 突き飛ばされてスタン！大ピンチ！': '💥 Shoved & stunned! Big trouble!',
+  '💥 突き飛ばしてスタン！反撃だ！': '💥 Shoved & stunned them! Strike now!',
+  '💦 スタミナ切れ…': '💦 Out of stamina...',
+  '💪 脱出成功！反撃チャンス！': '💪 Escaped! Counter chance!',
+  '💫 スタン！無防備！': '💫 Stunned! Defenseless!',
+  '💫 相手がスタン！攻めるチャンス！': '💫 Rival stunned! Attack now!',
+  '🛡️ ガードで弾き返した！相手スタン！反撃だ！': '🛡️ Parried! Rival stunned! Counter!',
+  '💀 場外負け…': '💀 RING OUT... You lose',
+  '🏆 勝利！！': '🏆 VICTORY!!',
+};
+function trStatus(text) {
+  if (!IS_EN || !text) return text;
+  if (T_STATUS[text]) return T_STATUS[text];
+  let m;
+  m = text.match(/^🆘 連打で脱出！\((\d+)\/(\d+)\)$/);
+  if (m) return `🆘 MASH to escape! (${m[1]}/${m[2]})`;
+  m = text.match(/^🆘 運ばれてる！ボタン連打で脱出！\(0\/(\d+)\)$/);
+  if (m) return `🆘 Carried! MASH buttons to escape! (0/${m[1]})`;
+  m = text.match(/^👊 プッシュ 威力(\d+)%！$/);
+  if (m) return `👊 Push! Power ${m[1]}%!`;
+  m = text.match(/^🧠 相手はあなたの癖を学習済み\(Lv(\d+)\)…$/);
+  if (m) return `🧠 Your rival has learned your habits (Lv${m[1]})...`;
+  return text;
+}
 function setStatus(text, hot) {
-  statusEl.textContent = text;
+  statusEl.textContent = trStatus(text);
   statusEl.classList.toggle('grabbing', !!hot);
 }
 
@@ -3338,7 +3444,5 @@ addDebugLog('💡 相手(赤)に近づいて攻撃ボタン');
 addDebugLog('ℹ️ 相手はAIなし。Reactアニメで位置が変わるだけ');
 </script>
 
-<!-- 忍者AdMax 広告(自動配置) -->
-<script async src="https://adm.shinobi.jp/st/auto.js" data-admax-id="e3f8b64f2e0c3c839d7dc756a2eeb533"></script>
 </body>
 </html>
