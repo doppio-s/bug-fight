@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v9</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v10</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0 };
 window.__net = net; // 診断用
-const NET_VER = 9; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 10; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -2977,6 +2977,7 @@ function _resetForOnline() {
   pKbX = 0; pKbZ = 0; eKbX = 0; eKbZ = 0; playerVelX = 0; playerVelZ = 0;
   worldStopped = false; worldStoppedE = false; TW.active = false; TWE.active = false;
   aiPreset = null; playerBug = 'stag'; window._forceEnemyBug = 'stag';
+  _glowMats.player = null; _glowMats.enemy = null; // ★旧モデルの材質キャッシュを破棄(これが無いと新キャラが光らない)
   net.spawnDone = false; net._lastGhostAct = 0; net.myAction = 0; net.actionT = 0; net.atkCd = 0; net.hitPending = null;
   initCharacters(stagGltf);
   if (net.role === 'client' && player && enemy) {
@@ -3100,6 +3101,19 @@ function wireOnlineLobby() {
   if (jb && jc) { const _j = (e) => { if (e) e.preventDefault(); _startJoin((jc.value || '').trim().toUpperCase()); }; jb.addEventListener('click', _j); jb.addEventListener('touchstart', _j); }
 }
 wireOnlineLobby();
+// 🔧 検証フック(僕がブラウザから直接オンライン処理をテストするため)
+window.__startOnlineTest = (role) => { net.role = role || 'host'; startOnlineMatch(); };
+window.__diag = () => JSON.stringify({
+  online, idleReady, state, gameOver,
+  hasP: !!player, hasE: !!enemy, pMix: !!playerMixer, eMix: !!enemyMixer,
+  pAct: Object.keys(pActions).length, eAct: Object.keys(eActions).length,
+  walkA: walkAnimName, atkA: attackAnimName, reactA: reactAnimName,
+  glowP: _glowMats.player ? _glowMats.player.length : -1,
+  glowE: _glowMats.enemy ? _glowMats.enemy.length : -1,
+  pPos: player ? [+player.position.x.toFixed(1), +player.position.y.toFixed(1), +player.position.z.toFixed(1)] : null,
+  ePos: enemy ? [+enemy.position.x.toFixed(1), +enemy.position.y.toFixed(1), +enemy.position.z.toFixed(1)] : null,
+  myAct: net.myAction, ghostAct: net._lastGhostAct, ready: net.ready
+});
 
 function animate() {
   requestAnimationFrame(animate);
