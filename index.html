@@ -3005,11 +3005,17 @@ function _onlineAttack(dt) {
   // 受け取ったヒットを自分に適用
   if (net.hitPending) {
     const h = net.hitPending; net.hitPending = null;
-    pKbX += h.fx * h.force; pKbZ += h.fz * h.force;
-    stunPlayer(0.55);
-    net.myAction = 2; net.actionT = 0.55;
-    const pr = pActions[reactAnimName]; if (pr) { pr.reset().setLoop(THREE.LoopOnce).play(); pr.clampWhenFinished = true; }
-    setStatus('押された！💥', true);
+    const _guarding = !!(keys.ShiftLeft || keys.ShiftRight);
+    const _m = _guarding ? 0.2 : 1.0; // ガードで大幅軽減
+    pKbX += h.fx * h.force * _m; pKbZ += h.fz * h.force * _m;
+    if (_guarding) {
+      setStatus('ガード！🛡️', true);
+    } else {
+      stunPlayer(0.55);
+      net.myAction = 2; net.actionT = 0.55;
+      const pr = pActions[reactAnimName]; if (pr) { pr.reset().setLoop(THREE.LoopOnce).play(); pr.clampWhenFinished = true; }
+      setStatus('押された！💥', true);
+    }
   }
   // 攻撃入力(E/Space/F or 画面のPUSH/GRABボタン)の押した瞬間
   const down = !!(keys.KeyE || keys.Space || keys.KeyF);
@@ -3021,16 +3027,16 @@ function _onlineAttack(dt) {
     const pa = pActions[attackAnimName]; if (pa) { pa.reset().setLoop(THREE.LoopOnce).play(); pa.clampWhenFinished = true; }
     // 踏み込み
     const _f = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
-    pKbX += _f.x * 5; pKbZ += _f.z * 5;
-    // 命中判定(相手ゴーストが前方・近距離)
+    pKbX += _f.x * 9; pKbZ += _f.z * 9; // 踏み込み(相手に近づく)
+    // 命中判定(相手ゴーストが前方・近距離)。ロックオンで正対しているので寛容め
     const dx = enemy.position.x - player.position.x, dz = enemy.position.z - player.position.z;
     const dd = Math.hypot(dx, dz) || 1;
     const fdot = (dx / dd) * _f.x + (dz / dd) * _f.z;
-    if (dd < 3.4 && fdot > 0.1) {
+    if (dd < 4.0 && fdot > -0.1) {
       try { net.conn && net.conn.send({ t: 'hit', fx: dx / dd, fz: dz / dd, force: 24 }); } catch (e) {}
       setStatus('プッシュ命中！🟡', true);
     } else {
-      setStatus('スカった', false);
+      setStatus('スカった…近づこう', false);
     }
   }
 }
@@ -4733,9 +4739,11 @@ joyThrowRequest = false; // 消費
       net.spawnDone = true;
       const _cl = (net.role === 'client');
       player.position.set(0, 0, _cl ? -8 : 8);
-      player.rotation.y = _cl ? 0 : Math.PI;
       enemy.position.set(0, 0, _cl ? 8 : -8);
-      addDebugLog('🌐 spawn role=' + net.role + ' P.z=' + player.position.z + ' E.z=' + enemy.position.z);
+      // localForward基準で確実に相手の方を向く(0/πの決め打ちに依存しない)
+      const _fA = Math.atan2(localForward.x, localForward.z);
+      player.rotation.y = Math.atan2(enemy.position.x - player.position.x, enemy.position.z - player.position.z) - _fA;
+      addDebugLog('🌐 spawn role=' + net.role + ' P.z=' + player.position.z.toFixed(0) + ' E.z=' + enemy.position.z.toFixed(0));
     }
     // 送信(接続オープン時のみ)
     if (net.conn && (net.ready || net.conn.open)) {
