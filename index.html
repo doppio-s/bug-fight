@@ -1215,7 +1215,15 @@ let gameOver = false;
 let fallingObj = null;  // 落下中のObject3D
 let fallVelY = 0;       // 落下速度
 function triggerFall(obj, isPlayerFalling) {
-  if (online) return; // オンラインは現在「移動同期フェーズ」=リングアウト無効(対戦実装時に置換)
+  if (online) {
+    // オンラインは各自が自分の場外だけ判定。自分が落ちたら負け→相手にKO通知
+    if (gameOver || obj !== player) return;
+    gameOver = true; fallingObj = player;
+    setStatus('💀 場外！', true);
+    setTimeout(() => showResult(trStatus('💀 場外負け…'), false), 1000);
+    try { net.conn && net.conn.send({ t: 'ko' }); } catch (e) {}
+    return;
+  }
   if (gameOver) return;
   gameOver = true;
   fallingObj = obj;
@@ -2559,8 +2567,9 @@ let twCooldown = 0, tweCooldown = 0;  // ザ・ワールドの再使用インタ
 // ===== 🌐 オンライン対戦(P2P・ホスト権威) =====
 let online = false;
 let _pMoving = false;
-const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0 };
+const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null };
 window.__net = net; // 診断用
+let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
 const TW_CHARGE  = 1.0;               // ★発動までの溜め(1秒)。この間に殴られると中断=対処可能
@@ -2923,7 +2932,13 @@ function _bindConn(c) {
   net.conn = c;
   net.ready = false;
   c.on('open', () => { net.ready = true; _netLog('接続成功！対戦開始 🎮'); try { c.send({ t: 'hello' }); } catch (e) {} startOnlineMatch(); });
-  c.on('data', (d) => { if (!d) return; if (d.t === 's') { net.remoteState = d; net._recv++; } else if (d.t === 'i') net.remoteKeys = d; });
+  c.on('data', (d) => {
+    if (!d) return;
+    if (d.t === 's') { net.remoteState = d; net._recv++; }
+    else if (d.t === 'hit') { net.hitPending = d; }
+    else if (d.t === 'ko') { if (online && !gameOver) { gameOver = true; setStatus('🏆 勝利！', true); setTimeout(() => showResult(trStatus('🏆 勝利！！'), true), 300); } }
+    else if (d.t === 'i') net.remoteKeys = d;
+  });
   c.on('close', () => { net.ready = false; _netLog('相手が切断しました'); });
   c.on('error', () => { _netLog('通信エラー'); });
 }
@@ -2967,11 +2982,56 @@ function _resetForOnline() {
   const ld = document.getElementById('loading'); if (ld) ld.style.display = 'none';
   addDebugLog('🌐 オンライン対戦開始 role=' + net.role);
 }
-function _applyRemoteAnim(obj, actions, w) {
+function _applyRemoteAnim(obj, actions, w, act) {
+  // ワンショット動作(攻撃/被弾)を相手ゴーストに反映
+  if (act === 1 && attackAnimName && actions[attackAnimName]) {
+    const pa = actions[attackAnimName];
+    if (!pa.isRunning()) { pa.reset().setLoop(THREE.LoopOnce).play(); pa.clampWhenFinished = true; }
+  } else if (act === 2 && reactAnimName && actions[reactAnimName]) {
+    const pr = actions[reactAnimName];
+    if (!pr.isRunning()) { pr.reset().setLoop(THREE.LoopOnce).play(); pr.clampWhenFinished = true; }
+  }
   const wn = walkAnimName; if (!wn || !actions[wn]) return;
-  const a = actions[wn];
-  if (w) { if (!a.isRunning()) a.reset().setLoop(THREE.LoopRepeat).play(); a.setEffectiveTimeScale(1.4); }
-  else { if (a.isRunning()) a.fadeOut(0.15); }
+  const wa = actions[wn];
+  if (w && act !== 1 && act !== 2) { if (!wa.isRunning()) wa.reset().setLoop(THREE.LoopRepeat).play(); wa.setEffectiveTimeScale(1.4); }
+  else { if (wa.isRunning()) wa.fadeOut(0.15); }
+}
+// 🌐 オンライン戦闘(プッシュ=押し出し)。攻撃側が命中判定→相手に通知、された側が自分にKB＆スタン
+function _onlineAttack(dt) {
+  net.atkCd -= dt;
+  net.actionT -= dt;
+  if (net.actionT <= 0) net.myAction = (state === STATE.STUN) ? 2 : 0;
+  // 受け取ったヒットを自分に適用
+  if (net.hitPending) {
+    const h = net.hitPending; net.hitPending = null;
+    pKbX += h.fx * h.force; pKbZ += h.fz * h.force;
+    stunPlayer(0.55);
+    net.myAction = 2; net.actionT = 0.55;
+    const pr = pActions[reactAnimName]; if (pr) { pr.reset().setLoop(THREE.LoopOnce).play(); pr.clampWhenFinished = true; }
+    setStatus('押された！💥', true);
+  }
+  // 攻撃入力(E/Space/F or 画面のPUSH/GRABボタン)の押した瞬間
+  const down = !!(keys.KeyE || keys.Space || keys.KeyF);
+  const pressed = down && !_atkWasDown;
+  _atkWasDown = down;
+  if (pressed && net.atkCd <= 0 && state !== STATE.STUN && !gameOver && player && enemy) {
+    net.atkCd = 0.6;
+    net.myAction = 1; net.actionT = 0.4;
+    const pa = pActions[attackAnimName]; if (pa) { pa.reset().setLoop(THREE.LoopOnce).play(); pa.clampWhenFinished = true; }
+    // 踏み込み
+    const _f = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
+    pKbX += _f.x * 5; pKbZ += _f.z * 5;
+    // 命中判定(相手ゴーストが前方・近距離)
+    const dx = enemy.position.x - player.position.x, dz = enemy.position.z - player.position.z;
+    const dd = Math.hypot(dx, dz) || 1;
+    const fdot = (dx / dd) * _f.x + (dz / dd) * _f.z;
+    if (dd < 3.4 && fdot > 0.1) {
+      try { net.conn && net.conn.send({ t: 'hit', fx: dx / dd, fz: dz / dd, force: 24 }); } catch (e) {}
+      setStatus('プッシュ命中！🟡', true);
+    } else {
+      setStatus('スカった', false);
+    }
+  }
 }
 function driveEnemyMoveOnline(dt) {
   const k = net.remoteKeys || {};
@@ -3180,8 +3240,12 @@ function animate() {
     let locoSpeed = 0; // 実際の移動速度(脚アニメの速度連動用=足が滑らないように)
     if (state === STATE.BITING || state === STATE.PUSHING) { playerVelX = 0; playerVelZ = 0; }
 
-    // 🌐 オンライン(移動同期フェーズ): 戦闘操作(掴みSpace/プッシュE/F)を無効化し、同期中の相手との取り合い(ガタつき)を防ぐ
-    if (online) { keys.Space = false; keys.KeyE = false; keys.KeyF = false; keyDownEdge.Space = keyUpEdge.Space = keyDownEdge.KeyE = keyUpEdge.KeyE = keyDownEdge.KeyF = keyUpEdge.KeyF = false; }
+    // 🌐 オンライン: プッシュ攻撃を処理してから、SP戦闘(掴み等)は無効化(同期中の相手を直接いじらない)
+    if (online) {
+      _onlineAttack(dt);
+      keys.Space = false; keys.KeyE = false; keys.KeyF = false;
+      keyDownEdge.Space = keyUpEdge.Space = keyDownEdge.KeyE = keyUpEdge.KeyE = keyDownEdge.KeyF = keyUpEdge.KeyF = false;
+    }
     // --- Space/Fの押した瞬間・離した瞬間を両方検出 ---
     const spaceDown = !!keys.Space;
     const spacePressed = (spaceDown && !spaceWasDown) || !!keyDownEdge.Space;
@@ -4671,7 +4735,7 @@ joyThrowRequest = false; // 消費
         try {
           net.conn.send({ t: 's', x: player.position.x, y: player.position.y, z: player.position.z,
             qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w,
-            w: (Math.hypot(playerVelX, playerVelZ) > 0.4) ? 1 : 0 });
+            w: (Math.hypot(playerVelX, playerVelZ) > 0.4) ? 1 : 0, a: net.myAction || 0 });
           net._send++;
         } catch (e) {}
       }
@@ -4683,11 +4747,8 @@ joyThrowRequest = false; // 消費
       enemy.position.y += (s.y - enemy.position.y) * a;
       enemy.position.z += (s.z - enemy.position.z) * a;
       _qTmp.set(s.qx, s.qy, s.qz, s.qw); enemy.quaternion.slerp(_qTmp, a);
-      _applyRemoteAnim(enemy, eActions, s.w);
+      _applyRemoteAnim(enemy, eActions, s.w, s.a || 0);
     }
-    // 場外落下防止(移動フェーズ)
-    const pr = Math.hypot(player.position.x, player.position.z);
-    if (pr > STUMP_RADIUS - 0.8) { const _k = (STUMP_RADIUS - 0.8) / pr; player.position.x *= _k; player.position.z *= _k; }
     // 画面に送受信カウンタ表示(問題切り分け用)
     net._dbgT += dt;
     if (net._dbgT > 0.5) {
