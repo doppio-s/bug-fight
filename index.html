@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v13</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v14</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2 };
 window.__net = net; // 診断用
-const NET_VER = 13; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 14; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -3007,15 +3007,15 @@ function _applyRemoteAnim(obj, actions, w, act) {
   // ワンショット動作(攻撃/被弾)は「変化した瞬間」に1回だけ再生
   if (act !== net._lastGhostAct) {
     const _pa = attackAnimName && actions[attackAnimName];
-    if (act === 1) _netPlayOnce(actions, attackAnimName, 1.25);
-    else if (act === 4 && _pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setEffectiveTimeScale(1.0); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = STANCE_HOLD_TIME; _pa.paused = true; } // 構え(顎オープン)
+    // act1(プッシュ)はSP同様クリップなし=突進の動きだけ(位置同期で見える)
+    if (act === 4 && _pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setEffectiveTimeScale(1.0); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = STANCE_HOLD_TIME; _pa.paused = true; } // 構え(顎オープン)
     else if (act === 5 && _pa) { if (_pa.paused) _pa.paused = false; else _netPlayOnce(actions, attackAnimName, 1.0); } // 噛みつき!
     else if (act === 2) _netPlayOnce(actions, reactAnimName, 1.0);
     net._lastGhostAct = act;
   }
   const wn = walkAnimName; if (!wn || !actions[wn]) return;
   const wa = actions[wn];
-  if (w && act !== 1 && act !== 2) { if (!wa.isRunning()) { wa.stop(); wa.reset(); wa.enabled = true; wa.setEffectiveWeight(1); wa.setLoop(THREE.LoopRepeat, Infinity); wa.play(); } wa.setEffectiveTimeScale(1.4); }
+  if (w && act !== 1 && act !== 2) { if (!wa.isRunning()) { wa.stop(); wa.reset(); wa.enabled = true; wa.setEffectiveWeight(1); wa.setLoop(THREE.LoopRepeat, Infinity); wa.play(); } wa.setEffectiveTimeScale(Math.min(6.5, Math.max(0.8, (net._gspd || 4) * STEP_CADENCE))); } // SPの歩調式
   else { if (wa.isRunning()) wa.fadeOut(0.15); }
 }
 // 🌐 オンライン戦闘: 三すくみ完全版(掴み＞ガード＞プッシュ＞掴み)
@@ -3108,7 +3108,8 @@ function _onlineAttack(dt) {
   }
   const _stunned = (state === STATE.STUN);
   const pushDown = !_stunned && (!!net.raw.KeyE || !!net.raw.KeyF);
-  const grabDown = !_stunned && !!net.raw.Space;
+  const _stickGrab = joyActive && joyPullRatio > 0.15 && joyDirection === 'down'; // 📱スティック引き=掴み
+  const grabDown = !_stunned && (!!net.raw.Space || _stickGrab);
   // --- プッシュ: 押して溜め→離して発動(SPのPUSH_CHARGE準拠) ---
   if (pushDown && net.pushChg === 0 && net.grabChg === 0 && net.biteT <= 0 && net.atkCd <= 0) net.pushChg = 0.0001;
   if (net.pushChg > 0) {
@@ -3129,6 +3130,8 @@ function _onlineAttack(dt) {
   if (net.grabChg > 0) {
     net.grabChg = Math.min(1.2, net.grabChg + dt);
     net.myAction = 4; net.actionT = 0.12;
+    const _paH = pActions[attackAnimName];
+    if (_paH && _paH.paused) _paH.time = STANCE_HOLD_TIME * (_stickGrab ? Math.min(1, joyPullRatio * 1.2) : 1); // 引き量=顎の開き(SPと同じ)
     if (!grabDown || _stunned) {
       net.grabChg = 0;
       if (!_stunned) {
@@ -3144,8 +3147,7 @@ function _onlineAttack(dt) {
 }
 function _doOnlinePush(chg) {
   net.atkCd = 0.55;
-  net.myAction = 1; net.actionT = 0.45;
-  _netPlayOnce(pActions, attackAnimName, 1.25);
+  net.myAction = 1; net.actionT = 0.45; // SP準拠: プッシュは体当たり(顎クリップは再生しない)
   const _f = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
   pKbX += _f.x * PUSH_LUNGE_SPEED; pKbZ += _f.z * PUSH_LUNGE_SPEED; // SPの踏み込み速度
   // ★SPと同じ命中判定: 体表面距離 or 中心距離 + 正面判定
@@ -3460,7 +3462,7 @@ function animate() {
       // 構え中(STANCE)＋前進(W)＝突進！速度アップ
       // ガード判定：Shift押しっぱなしで速度半分
       guardHeld = !!(keys.ShiftLeft || keys.ShiftRight);
-      const speedMult = (state === STATE.PUSH_CHARGE) ? 0.35 : (guardHeld ? 0.5 : 1.0);
+      const speedMult = ((state === STATE.PUSH_CHARGE || (online && net.pushChg > 0)) ? 0.35 : (guardHeld ? 0.5 : 1.0));
       const _locoP0 = player.position.clone(); // 移動前の位置(実移動距離の計測用)
       const fwdSpeed = ((state === STATE.STANCE || (online && net.grabChg > 0)) && (keys.KeyW || keys.ArrowUp)) ? CHARGE_SPEED : moveSpeed;
       // ★目標速度を計算(直接動かさず、後で摩擦つきで反映)
@@ -3748,7 +3750,7 @@ function animate() {
     }
     // ========== 攻撃ジョイスティック処理 ==========
     // 引き始め: FREE状態で15%以上引いたらSTANCE突入
-    if (!gameOver && !playerThrown && !worldStoppedE && joyActive && joyPullRatio > 0.15 && joyDirection === 'down' && state === STATE.FREE && attackAnimName) {
+    if (!online && !gameOver && !playerThrown && !worldStoppedE && joyActive && joyPullRatio > 0.15 && joyDirection === 'down' && state === STATE.FREE && attackAnimName) {
       // ★カブトは'blowaway'(吹き飛ばし)を発動、クワガタは通常の'grab'
       const mode = (player.userData && player.userData.bug === 'kabuto') ? 'blowaway' : 'grab';
       const requiredStam = (mode === 'blowaway') ? STAM_MIN_BLOWAWAY : STAM_MIN_GRAB;
@@ -4940,18 +4942,6 @@ joyThrowRequest = false; // 消費
       camera.lookAt(player.position.x, 1.0, player.position.z);
       addDebugLog('🌐 spawn role=' + net.role + ' P.z=' + player.position.z.toFixed(0) + ' E.z=' + enemy.position.z.toFixed(0));
     }
-    // 見て分かる攻撃/被弾モーション(プロシージャル)。回転ごと同期されるので相手画面にも映る
-    if (!gameOver) {
-      if (net.myAction === 1) {
-        const _pg = Math.max(0, Math.min(1, 1 - net.actionT / 0.45));
-        player.rotation.x = -Math.sin(_pg * Math.PI) * 0.55; // 前のめりに突く
-      } else if (net.myAction === 2) {
-        const _pg2 = Math.max(0, Math.min(1, 1 - net.actionT / 0.55));
-        player.rotation.x = Math.sin(_pg2 * Math.PI) * 0.4; // のけぞる
-      } else if (net.myAction === 3 || net.myAction === 4) {
-        player.rotation.x = 0.14 + Math.sin(performance.now() * 0.02) * 0.03; // 溜め=低く構える
-      }
-    }
     // 相手のめり込み防止: アニメのRoot移動で体が地面下に潜るのをクランプ
     if (enemy.position.y < 0) enemy.position.y = 0;
     {
@@ -4999,6 +4989,12 @@ joyThrowRequest = false; // 消費
         enemy.rotation.y += _dy * a;
         enemy.rotation.x += ((isFinite(s.px) ? s.px : 0) - enemy.rotation.x) * a;
         enemy.rotation.z *= 0.9;
+        // ゴーストの実移動速度から歩調を計算(SPと同じ式=足が滑らない)
+        {
+          const _gs = Math.hypot(enemy.position.x - (net._gpx || enemy.position.x), enemy.position.z - (net._gpz || enemy.position.z)) / Math.max(0.001, dt);
+          net._gspd = (net._gspd || 0) * 0.8 + _gs * 0.2;
+          net._gpx = enemy.position.x; net._gpz = enemy.position.z;
+        }
         _applyRemoteAnim(enemy, eActions, s.w, s.a || 0);
       } else {
         net.remoteState = null; // 形式違い(旧バージョンの相手など)は無視
