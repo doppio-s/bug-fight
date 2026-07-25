@@ -2567,7 +2567,7 @@ let twCooldown = 0, tweCooldown = 0;  // ザ・ワールドの再使用インタ
 // ===== 🌐 オンライン対戦(P2P・ホスト権威) =====
 let online = false;
 let _pMoving = false;
-const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null };
+const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false };
 window.__net = net; // 診断用
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
@@ -2974,6 +2974,7 @@ function _resetForOnline() {
   pKbX = 0; pKbZ = 0; eKbX = 0; eKbZ = 0; playerVelX = 0; playerVelZ = 0;
   worldStopped = false; worldStoppedE = false; TW.active = false; TWE.active = false;
   aiPreset = null; playerBug = 'stag'; window._forceEnemyBug = 'stag';
+  net.spawnDone = false;
   initCharacters(stagGltf);
   if (net.role === 'client' && player && enemy) {
     player.position.set(0, 0, -8); player.rotation.y = 0; // 参加側は手前(-8)側で+z向き=相手と向かい合う
@@ -4727,6 +4728,15 @@ joyThrowRequest = false; // 消費
   updateColliderMeshes();
   // 🌐 オンライン(対称型): 自分のキャラを送信し、相手のキャラを受信して敵に補間反映
   if (online && player && enemy) {
+    // スポーン位置を描画ループ側で確実に割り振る(初期化タイミングに依存しない)
+    if (!net.spawnDone) {
+      net.spawnDone = true;
+      const _cl = (net.role === 'client');
+      player.position.set(0, 0, _cl ? -8 : 8);
+      player.rotation.y = _cl ? 0 : Math.PI;
+      enemy.position.set(0, 0, _cl ? 8 : -8);
+      addDebugLog('🌐 spawn role=' + net.role + ' P.z=' + player.position.z + ' E.z=' + enemy.position.z);
+    }
     // 送信(接続オープン時のみ)
     if (net.conn && (net.ready || net.conn.open)) {
       net.lastSend += dt;
@@ -4754,7 +4764,7 @@ joyThrowRequest = false; // 消費
     if (net._dbgT > 0.5) {
       net._dbgT = 0;
       const _el = document.getElementById('netDbg');
-      if (_el) { _el.style.display = 'block'; _el.textContent = '🌐' + (net.role || '-') + ' 送' + net._send + ' 受' + net._recv + (net.ready ? ' OK' : ' …'); }
+      if (_el) { _el.style.display = 'block'; _el.textContent = '🌐' + (net.role || '-') + ' 送' + net._send + ' 受' + net._recv + (net.ready ? ' OK' : ' …') + ' P' + player.position.x.toFixed(0) + ',' + player.position.z.toFixed(0) + ' E' + enemy.position.x.toFixed(0) + ',' + enemy.position.z.toFixed(0); }
     }
   }
   renderer.render(scene, camera);
