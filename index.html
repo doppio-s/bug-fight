@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）</button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v9</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0 };
 window.__net = net; // 診断用
-const NET_VER = 8; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 9; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -4725,7 +4725,7 @@ joyThrowRequest = false; // 消費
         else if (state === STATE.PUSH_CHARGE) { col = PUSH_GLOW; inten = 0.5 + Math.min(1, pushChargeTime / PUSH_MAX_CHARGE) * 1.7; } // プッシュ溜め=真っ赤
         else if (state === STATE.PUSHING) { col = PUSH_GLOW; inten = 1.6; }                      // プッシュ=真っ赤
         else if (state === STATE.STANCE || state === STATE.BITING) { col = GRAB_GLOW; inten = 1.1; } // 掴み構え/噛みつき=黄
-        else if (online && net.myAction === 1) { col = PUSH_GLOW; inten = 0.9; }                 // 🌐プッシュ攻撃=黄(控えめフラッシュ)
+        else if (online && net.myAction === 1) { col = PUSH_GLOW; inten = 1.25; }                // 🌐プッシュ攻撃=黄フラッシュ
         else if (guardHeld) { col = GUARD_GLOW; inten = 0.95; }                                  // ガード=青
       }
       setGlow('player', col, inten);
@@ -4736,9 +4736,9 @@ joyThrowRequest = false; // 消費
         if (online) {
           const _rs = net.remoteState;
           if (_rs) {
-            if (_rs.a === 1) { col = PUSH_GLOW; inten = 0.9; }          // 🌐相手プッシュ=黄(控えめ)
+            if (_rs.a === 1) { col = PUSH_GLOW; inten = 1.25; }         // 🌐相手プッシュ=黄フラッシュ
             else if (_rs.a === 2) { col = STUN_GLOW; inten = _pulse * 0.45; } // 🌐相手スタン=うっすら白
-            else if (_rs.g) { col = GUARD_GLOW; inten = 0.6; }          // 🌐相手ガード=青(控えめ)
+            else if (_rs.g) { col = GUARD_GLOW; inten = 0.8; }          // 🌐相手ガード=青
           }
         }
         else if (eGuardFlash > 0) { col = GUARD_GLOW; inten = 1.3 + eGuardFlash * 5; }
@@ -4784,6 +4784,12 @@ joyThrowRequest = false; // 消費
       camera.lookAt(player.position.x, 1.0, player.position.z);
       addDebugLog('🌐 spawn role=' + net.role + ' P.z=' + player.position.z.toFixed(0) + ' E.z=' + enemy.position.z.toFixed(0));
     }
+    // 相手のめり込み防止: アニメのRoot移動で体が地面下に潜るのをクランプ
+    if (enemy.position.y < 0) enemy.position.y = 0;
+    {
+      const _erb = enemy.getObjectByName('Root');
+      if (_erb && _erb.position.y < 0) _erb.position.y = 0;
+    }
     // オンライン中は当たり判定表示を強制OFF(見た目がうるさいので)
     if (showColliders) {
       showColliders = false;
@@ -4814,7 +4820,7 @@ joyThrowRequest = false; // 消費
       if (isFinite(s.x) && isFinite(s.y) && isFinite(s.z) && isFinite(s.qx) && isFinite(s.qy) && isFinite(s.qz) && isFinite(s.qw)) {
         const a = Math.min(1, dt * 16);
         enemy.position.x += (s.x - enemy.position.x) * a;
-        enemy.position.y += (s.y - enemy.position.y) * a;
+        enemy.position.y += (Math.max(0, Math.min(3, s.y)) - enemy.position.y) * a; // 地面より下へは同期しない
         enemy.position.z += (s.z - enemy.position.z) * a;
         _qTmp.set(s.qx, s.qy, s.qz, s.qw); enemy.quaternion.slerp(_qTmp, a);
         _applyRemoteAnim(enemy, eActions, s.w, s.a || 0);
