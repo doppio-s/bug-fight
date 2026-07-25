@@ -359,6 +359,7 @@
     100% { transform: translate(-50%, -50%) scale(0.8) rotate(0deg);   opacity: 0; }
   }
 </style>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
@@ -408,12 +409,29 @@
     <div class="ctrl-row"><span class="tw-red">🔴掴み</span> <kbd>Space</kbd>長押し→離して投げ　<span class="tw-yellow">🟡プッシュ</span> <kbd>E</kbd>長押しで溜め</div>
     <div class="ctrl-row"><span class="tw-blue">🔵ガード</span> <kbd>Shift</kbd>　🎯ロックオン <kbd>Q</kbd>　（スマホは画面のボタン）</div>
   </div>
-  <div id="diffTitle">相手の強さを選んでスタート</div>
+    <div id="bugTitle" style="font-size:22px;color:#ffe0a0;margin:4px 0 10px;">じぶんの虫をえらぶ（相手はライバル種）</div>
+  <div id="bugSelect" style="display:flex;gap:16px;justify-content:center;margin-bottom:18px;flex-wrap:wrap;">
+    <button class="bugBtn" data-bug="stag" style="padding:12px 24px;font-size:21px;font-family:inherit;background:rgba(40,30,15,0.85);border:2px solid #6b5a33;border-radius:12px;color:#ffe0a0;cursor:pointer;">🪲 クワガタ</button>
+    <button class="bugBtn" data-bug="kabuto" style="padding:12px 24px;font-size:21px;font-family:inherit;background:rgba(40,30,15,0.85);border:2px solid #6b5a33;border-radius:12px;color:#ffe0a0;cursor:pointer;">🦏 カブトムシ</button>
+    <button class="bugBtn" data-bug="tong" style="padding:12px 24px;font-size:21px;font-family:inherit;background:rgba(40,30,15,0.85);border:2px solid #6b5a33;border-radius:12px;color:#ffe0a0;cursor:pointer;">🪵 Tong <span style="font-size:11px;color:#ffb37a;">NEW!</span></button>
+  </div>
+<div id="diffTitle">相手の強さを選んでスタート</div>
   <div class="diff-buttons">
     <button class="diffBtn" data-level="1">🐣 よわい</button>
     <button class="diffBtn" data-level="2">⚔️ ふつう</button>
     <button class="diffBtn" data-level="3">🔥 つよい</button>
     <button class="diffBtn" data-level="4">💀 最強</button>
+  </div>
+  <div id="onlineWrap" style="margin-top:14px;">
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）</button>
+    <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
+      <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
+      <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
+      <span style="display:inline-block;width:10px;"></span>
+      <input id="joinCode" placeholder="コード" maxlength="8" style="width:88px;font-size:16px;padding:7px;border-radius:8px;border:2px solid #6b5a33;background:#201810;color:#ffe0a0;text-transform:uppercase;" />
+      <button id="joinBtn" style="padding:8px 16px;font-size:15px;font-family:inherit;background:rgba(60,40,30,0.9);border:2px solid #8a5a3a;border-radius:8px;color:#ffd0a0;cursor:pointer;">🚪 参加する</button>
+      <div id="netStatus" style="margin-top:10px;font-size:14px;color:#ffe;">オフライン</div>
+    </div>
   </div>
   <button id="learnResetBtn" style="margin-top:14px;background:none;border:1px solid rgba(255,255,255,0.3);color:#9a9a9a;font-size:12px;padding:6px 16px;border-radius:8px;cursor:pointer;">🧠 学習データをリセット</button>
   <!-- 広告(タイトル画面のみ表示・ゲーム中は非表示 / 端末でPC枠・スマホ枠を自動出し分け) -->
@@ -675,20 +693,156 @@ const HITBOX_BONES = ['Head', 'Thorax', 'Abdomen', 'Mandible_L', 'Mandible_R',
   'Leg_B_L_femur', 'Leg_B_R_femur',
   'Leg_F_L_tarsus', 'Leg_F_R_tarsus', 'Leg_M_L_tarsus', 'Leg_M_R_tarsus',
   'Leg_B_L_tarsus', 'Leg_B_R_tarsus'];
-const BITE_BONES = ['Mandible_L', 'Mandible_R']; // 噛みつく側の判定に使うボーン
+const BITE_BONES = ['Mandible_L', 'Mandible_R']; // 噛みつく側の判定に使うボーン(クワガタ)
+const BITE_BONES_KABUTO = ['Head']; // カブトは頭の先で押し込む(大顎メッシュがないため)
+function _biteBonesFor(root) {
+  // カブトなら Head を使う、それ以外は Mandible
+  return (root && root.userData && root.userData.bug === 'kabuto') ? BITE_BONES_KABUTO : BITE_BONES;
+}
 let pBones = null, eBones = null; // ボーン名→Object3D のキャッシュ
+let pColliders = null, eColliders = null; // キャラごとの体型コライダー(kabuto=ツノ)
 
 function cacheBones(root) {
   const map = {};
   for (const name of HITBOX_BONES) map[name] = root.getObjectByName(name);
+  // ★Tong(サフール)はMixamo系の人型リグで虫の骨名を持たない。
+  //   このまま返すと全ボーンundefined→findClosestHit()が常にInfinity→
+  //   掴みが永久にスカる＆相手がスタンのまま赤く固まるバグになる。
+  //   人体の骨を虫の判定部位に対応付けて、当たり判定を成立させる。
+  if (root.userData && root.userData.bug === 'tong') {
+    const g = n => root.getObjectByName(n);
+    const hips  = g('mixamorig:Hips_01');
+    const chest = g('mixamorig:Spine1_03') || g('mixamorig:Spine_02') || hips;
+    const head  = g('mixamorig:Head_06') || chest;
+    const rHand = g('mixamorig:RightHand_015') || head;
+    const lHand = g('mixamorig:LeftHand_011') || rHand;
+    const rFoot = g('mixamorig:RightFoot_023') || hips;
+    const lFoot = g('mixamorig:LeftFoot_018') || rFoot;
+    const rKnee = g('mixamorig:RightLeg_022') || rFoot;
+    const lKnee = g('mixamorig:LeftLeg_017') || lFoot;
+    const alias = {
+      'Head': head, 'Thorax': chest, 'Abdomen': hips,
+      'Mandible_L': rHand, 'Mandible_R': lHand,
+    };
+    const fallback = chest || head || hips || root;
+    for (const name of HITBOX_BONES) {
+      if (alias[name]) { map[name] = alias[name]; continue; }
+      if (name.indexOf('Leg') !== -1) {
+        const left = name.indexOf('_L_') !== -1;
+        if (name.indexOf('tarsus') !== -1) map[name] = (left ? lFoot : rFoot) || fallback;
+        else if (name.indexOf('femur') !== -1) map[name] = (left ? lKnee : rKnee) || fallback;
+        else map[name] = hips || fallback; // coxa=股関節
+      } else {
+        map[name] = fallback;
+      }
+    }
+  }
   return map;
 }
+
+// ========== 🦏 カブトムシ変身(モデル流用: 大顎を畳んで3D角を骨に生やす+赤茶色) ==========
+const KABUTO_TEST = /[?&]kabuto=/.test(location.search); // ?kabuto=1 で敵がカブトムシ(テスト)
+let _kabutoBonesE = null; // 毎フレーム大顎を畳む対象(敵・アニメの上書き対策)
+let _kabutoBonesP = null; // 同(プレイヤー)
+let playerBug = 'stag';   // 選択中の自分の虫 'stag'|'kabuto'(相手は自動で逆)
+let _bugStarted = false;  // 一度開始したら変身固定(変更時はリロード)
+let _hornProtoHead = null, _hornProtoThorax = null; // Blender彫刻版の角(kabuto_horns.glb)
+function _hornTube(points, radius, mat) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, radius, 8, false), mat);
+  m.frustumCulled = false;
+  return m;
+}
+function _buildHorn(bone, baseY, len, riseAmt, radius, prongLen, prongSpread, mat) {
+  // ボーンのローカル+Y=先端方向。世界の「上」をボーンローカルに変換して湾曲方向を決める
+  const q = new THREE.Quaternion();
+  bone.getWorldQuaternion(q);
+  const f = new THREE.Vector3(0, 1, 0);
+  const u = new THREE.Vector3(0, 1, 0).applyQuaternion(q.invert());
+  u.addScaledVector(f, -u.dot(f)).normalize();           // fと直交化
+  const s = new THREE.Vector3().crossVectors(f, u).normalize(); // 横方向
+  const base = new THREE.Vector3(0, baseY, 0);
+  const pts = [];
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4;
+    pts.push(base.clone().addScaledVector(f, len * t).addScaledVector(u, riseAmt * Math.pow(t, 1.6)));
+  }
+  const grp = new THREE.Group();
+  grp.add(_hornTube(pts, radius, mat));
+  // 先端の二又(カブトの角らしさ)
+  const tip = pts[4];
+  const dir = tip.clone().sub(pts[3]).normalize();
+  for (const sign of [1, -1]) {
+    const p2 = [
+      tip.clone(),
+      tip.clone().addScaledVector(dir, prongLen * 0.55).addScaledVector(s, sign * prongSpread * 0.5).addScaledVector(u, prongLen * 0.3),
+      tip.clone().addScaledVector(dir, prongLen).addScaledVector(s, sign * prongSpread).addScaledVector(u, prongLen * 0.7),
+    ];
+    grp.add(_hornTube(p2, radius * 0.55, mat));
+  }
+  bone.add(grp);
+  return grp;
+}
+function _addHornsOnly(root, bonesMap) {
+  // カブトGLB用: 体色/大顎はメッシュ側で対応済み。角だけ追加
+  const head = bonesMap['Head'], thorax = bonesMap['Thorax'];
+  if (!head || !thorax) return;
+  const hornMat = new THREE.MeshPhysicalMaterial({ color: 0x2a1408, metalness: 0.7, roughness: 0.35 });
+  if (_hornProtoHead && _hornProtoThorax) {
+    _attachHornMesh(head, _hornProtoHead, 1.02, 0.12, 1.0, hornMat);
+    _attachHornMesh(thorax, _hornProtoThorax, 1.20, 0.10, 1.0, hornMat);
+  } else {
+    _buildHorn(head, 1.15, 2.3, 1.15, 0.13, 0.6, 0.34, hornMat);
+    _buildHorn(thorax, 1.28, 1.15, 0.72, 0.10, 0.32, 0.2, hornMat);
+  }
+}
+function applyKabutoLook(root, bonesMap) {
+  // 体色: カブトの赤茶(マテリアル複製で独立)
+  root.traverse(o => {
+    if (o.isMesh && o.material) { o.material = o.material.clone(); o.material.color.setHex(0x59230e); }
+  });
+  const head = bonesMap['Head'], thorax = bonesMap['Thorax'];
+  if (!head || !thorax) return;
+  const hornMat = new THREE.MeshPhysicalMaterial({ color: 0x451a08, metalness: 0.85, roughness: 0.32, clearcoat: 0.0 });
+  if (_hornProtoHead && _hornProtoThorax) {
+    // ★Blender彫刻版の角(kabuto_horns.glb)
+    _attachHornMesh(head, _hornProtoHead, 1.02, 0.12, 1.0, hornMat);
+    _attachHornMesh(thorax, _hornProtoThorax, 1.20, 0.10, 1.0, hornMat);
+  } else {
+    // フォールバック(角GLB未読込時の簡易版)
+    _buildHorn(head, 1.15, 2.3, 1.15, 0.13, 0.6, 0.34, hornMat);
+    _buildHorn(thorax, 1.28, 1.15, 0.72, 0.10, 0.32, 0.2, hornMat);
+  }
+}
+function _attachHornMesh(bone, proto, baseY, upOff, scale, mat) {
+  // ボーンローカル+Y=先端方向。世界の上をローカル変換して角の向き(前=+Y/上=+Z)を合わせる
+  const q = new THREE.Quaternion();
+  bone.getWorldQuaternion(q);
+  const f = new THREE.Vector3(0, 1, 0);
+  const u = new THREE.Vector3(0, 1, 0).applyQuaternion(q.invert());
+  u.addScaledVector(f, -u.dot(f)).normalize();
+  const s = new THREE.Vector3().crossVectors(f, u).normalize();
+  const grp = proto.clone(true);
+  grp.traverse(o => { if (o.isMesh) { o.material = mat; o.frustumCulled = false; } });
+  grp.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(s, f, u));
+  grp.position.set(0, baseY, 0).addScaledVector(u, upOff);
+  grp.scale.setScalar(scale);
+  bone.add(grp);
+  return grp;
+}
+// ★彫刻版の角を先読み(28KB・読めなくても簡易角で続行できる)
+new GLTFLoader().load('kabuto_horns.glb', (g) => {
+  _hornProtoHead = g.scene.getObjectByName('Horn_Head');
+  _hornProtoThorax = g.scene.getObjectByName('Horn_Thorax');
+  addDebugLog('🦏 角モデル読込OK');
+}, undefined, () => addDebugLog('⚠️ 角モデル読込失敗→簡易角で続行'));
 
 // 攻撃側の大顎中点(口の中心)と、防御側の全身ボーンとの最短距離＆部位を返す
 // 前回「先端寄りに1.2オフセット」試したがボーンY軸方向の解釈がズレて悪化したため
 // シンプルにボーン根元(getWorldPosition)方式に戻す。距離しきい値を代わりに緩和
 const _hitV1 = new THREE.Vector3(), _hitV2 = new THREE.Vector3(), _hitCenter = new THREE.Vector3();
-function findClosestHit(attackerBonesMap, attackerBoneNames, defenderBonesMap) {
+function findClosestHit(attackerBonesMap, attackerBoneNames, defenderBonesMap, defenderColliders) {
+  const _COLL = defenderColliders || BODY_COLLIDERS;
   // 噛みつき点＝攻撃側ボーンの世界座標重心
   _hitCenter.set(0, 0, 0);
   let count = 0;
@@ -702,14 +856,20 @@ function findClosestHit(attackerBonesMap, attackerBoneNames, defenderBonesMap) {
   if (count === 0) return { dist: Infinity, part: null };
   _hitCenter.divideScalar(count);
 
-  // 噛みつき点に最も近いP2の部位を探す
+  // ★精度強化: 相手の全身コライダー球(体幹オフセット球+脚含む)に対して
+  //   「表面までの距離」(中心距離-球半径)で判定=太い部位も細い部位も見た目通りに掴める
   let minDist = Infinity, part = null;
-  for (const dn of HITBOX_BONES) {
-    const db = defenderBonesMap[dn];
+  for (let i = 0; i < _COLL.length; i++) {
+    const c = _COLL[i];
+    const db = defenderBonesMap[c.bone];
     if (!db) continue;
-    db.getWorldPosition(_hitV2);
-    const d = _hitCenter.distanceTo(_hitV2);
-    if (d < minDist) { minDist = d; part = dn; }
+    if (c.localOffset) {
+      _hitV2.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(db.matrixWorld);
+    } else {
+      _hitV2.setFromMatrixPosition(db.matrixWorld);
+    }
+    const d = _hitCenter.distanceTo(_hitV2) - c.radius;
+    if (d < minDist) { minDist = d; part = c.bone; }
   }
   return { dist: minDist, part };
 }
@@ -781,6 +941,28 @@ const BODY_COLLIDERS = [
   { bone: 'Leg_B_R_tarsus', radius: 0.16, localOffset: [0, 0.80, 0] },
   { bone: 'Leg_B_R_tarsus', radius: 0.14, localOffset: [0, 1.15, 0] },
 ];
+
+// ★カブト用: 大顎(存在しない)コライダーの代わりに、頭から前方へ伸びるツノのコライダー
+const HORN_COLLIDERS = [
+  { bone: 'Head',   radius: 0.34, localOffset: [0, 1.55, 0] },
+  { bone: 'Head',   radius: 0.29, localOffset: [0, 2.15, 0] },
+  { bone: 'Head',   radius: 0.24, localOffset: [0, 2.75, 0] },
+  { bone: 'Head',   radius: 0.19, localOffset: [0, 3.25, 0] },
+  { bone: 'Thorax', radius: 0.26, localOffset: [0, 1.80, 0] },  // 小さい胸角
+];
+const _isMandible = (bn) => bn === 'Mandible_L' || bn === 'Mandible_R';
+// キャラの体に合ったコライダー集合(full=全身/body=脚以外の押し合い用)を返す
+//   kabuto=大顎を外してツノを追加 / stag・tong=大顎(tongは手にエイリアス)
+function buildColliderSet(bug) {
+  const full = [];
+  for (const c of BODY_COLLIDERS) {
+    if (bug === 'kabuto' && _isMandible(c.bone)) continue; // カブトに大顎はない
+    full.push(c);
+  }
+  if (bug === 'kabuto') for (const c of HORN_COLLIDERS) full.push(c);
+  const body = full.filter(c => c.bone === 'Head' || c.bone === 'Thorax' || c.bone === 'Abdomen' || _isMandible(c.bone));
+  return { full, body };
+}
 
 // ---- コライダー可視化 ----
 // 半透明の球でコライダーを表示。デフォルトON、Vキーで切替
@@ -857,68 +1039,52 @@ function bodyCenterDist(bones, obj) {
 }
 // 軽量化用: コライダーのワールド座標キャッシュ(毎フレーム再生成しない)
 const _collP = [], _collE = [];
-let _collValid = null, _bodyIdx = null;
 function resolveBodyCollisions() {
-  if (!pBones || !eBones) return;
+  if (!pBones || !eBones || !pColliders || !eColliders) return;
   // 噛みつきモーション中(BITING)と、P2が飛ばされてる最中(REACTING)は物理無効＝アニメ優先。
-  // FREE/STANCE中は貫通防止を効かせる(構え中に相手に体当たりで押し込むのはOK、貫通はNG)
   if (gameOver) return;
+  if (worldStopped || worldStoppedE) return; // ⏱ 時間停止中は押し合い無効(凍結相手を動かさない)
   if (state === STATE.BITING || enemyState === ENEMY_STATE.REACTING || enemyState === ENEMY_STATE.GRIPPED || playerCarried) return;
 
   // ★吹っ飛び滑り中は押し戻しをしない(飛ばされ中に押し合って震えるのを防ぐ)
   if (Math.hypot(pKbX, pKbZ) > 3 || Math.hypot(eKbX, eKbZ) > 3) return;
-  // ★押し出し前の半径を記録。歩いて到達した位置(r0)は絶対に保ち、押し出しでそれ以上外へは出さない。
-  //   (自分で歩いて縁を越える=場外は上の縁チェックが先に発火するのでここには来ない)
   const _pR0 = Math.hypot(player.position.x, player.position.z);
   const _eR0 = Math.hypot(enemy.position.x, enemy.position.z);
 
-  // ★軽量化: コライダーのワールド座標を毎反復まとめて計算(getWorldPositionの多重呼び出しを回避)
-  const N = BODY_COLLIDERS.length;
-  if (_collP.length === 0) {
-    for (let i = 0; i < N; i++) { _collP.push(new THREE.Vector3()); _collE.push(new THREE.Vector3()); }
-  }
-  // ★体幹+大顎のコライダーだけ使う(脚38個は除外=約10倍軽い。脚が薄く重なるのは見た目ほぼ影響なし)
-  if (!_bodyIdx) {
-    const bodyBones = { Head: 1, Thorax: 1, Abdomen: 1, Mandible_L: 1, Mandible_R: 1 };
-    _bodyIdx = [];
-    for (let i = 0; i < N; i++) {
-      const bn = BODY_COLLIDERS[i].bone;
-      if (bodyBones[bn] && pBones[bn] && eBones[bn]) _bodyIdx.push(i);
-    }
-  }
-  const M = _bodyIdx.length;
+  // ★体幹のコライダーだけ使う(脚は除外=軽量)。P1とP2で体型が違う(kabuto=ツノ)ので別配列
+  const pB = pColliders.body, eB = eColliders.body;
+  const MP = pB.length, ME = eB.length;
+  while (_collP.length < MP) _collP.push(new THREE.Vector3());
+  while (_collE.length < ME) _collE.push(new THREE.Vector3());
   // ★ブロードフェーズ: 中心が十分離れていれば貫通なし=重い判定を丸ごとスキップ
   const _cdx = player.position.x - enemy.position.x, _cdz = player.position.z - enemy.position.z;
   if (_cdx * _cdx + _cdz * _cdz > 49) return; // 中心7以上離れていたらスキップ
   for (let iter = 0; iter < 2; iter++) {
     player.updateMatrixWorld(true);
     enemy.updateMatrixWorld(true);
-    for (let k = 0; k < M; k++) {
-      const i = _bodyIdx[k];
-      const c = BODY_COLLIDERS[i];
-      const pb = pBones[c.bone], eb = eBones[c.bone];
-      const pv = _collP[i], ev = _collE[i];
-      if (c.localOffset) {
-        pv.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(pb.matrixWorld);
-        ev.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(eb.matrixWorld);
-      } else {
-        pv.setFromMatrixPosition(pb.matrixWorld);
-        ev.setFromMatrixPosition(eb.matrixWorld);
-      }
+    for (let k = 0; k < MP; k++) {
+      const c = pB[k], pb = pBones[c.bone], pv = _collP[k];
+      if (!pb) { pv.set(1e9, 1e9, 1e9); continue; }
+      if (c.localOffset) pv.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(pb.matrixWorld);
+      else pv.setFromMatrixPosition(pb.matrixWorld);
+    }
+    for (let k = 0; k < ME; k++) {
+      const c = eB[k], eb = eBones[c.bone], ev = _collE[k];
+      if (!eb) { ev.set(-1e9, -1e9, -1e9); continue; }
+      if (c.localOffset) ev.set(c.localOffset[0], c.localOffset[1], c.localOffset[2]).applyMatrix4(eb.matrixWorld);
+      else ev.setFromMatrixPosition(eb.matrixWorld);
     }
     let moved = false;
-    for (let k = 0; k < M; k++) {
-      const i = _bodyIdx[k];
-      const pv = _collP[i], pr = BODY_COLLIDERS[i].radius;
-      for (let l = 0; l < M; l++) {
-        const j = _bodyIdx[l];
-        const ev = _collE[j];
-        const minDist = pr + BODY_COLLIDERS[j].radius;
+    for (let k = 0; k < MP; k++) {
+      const pv = _collP[k], pr = pB[k].radius;
+      for (let l = 0; l < ME; l++) {
+        const ev = _collE[l];
+        const minDist = pr + eB[l].radius;
         const dx = pv.x - ev.x, dz = pv.z - ev.z;
         const distSq = dx * dx + dz * dz;
         if (distSq < minDist * minDist && distSq > 1e-4) {
           const dist = Math.sqrt(distSq);
-          const push = Math.min((minDist - dist) * 0.5, 0.4); // 半々に押し合う(1回の押し戻し上限=はじけ飛び防止)
+          const push = Math.min((minDist - dist) * 0.5, 0.4);
           const ux = dx / dist, uz = dz / dist;
           player.position.x += ux * push; player.position.z += uz * push;
           enemy.position.x -= ux * push; enemy.position.z -= uz * push;
@@ -1003,7 +1169,8 @@ const PUSH_DURATION = 0.45;   // プッシュ全体の時間
 const PUSH_ACTIVE_START = 0.08; // 押し出し判定が出る開始(秒)
 const PUSH_ACTIVE_END = 0.25;   // 押し出し判定が消える(秒)
 const PUSH_LUNGE_SPEED = 6.0; // プッシュ中の前進速度
-const PUSH_RANGE = 3.2;       // プッシュが届く距離
+const PUSH_RANGE = 3.2;       // プッシュが届く距離(中心間・フォールバック)
+const PUSH_CONNECT = 2.1;     // プッシュ命中判定(体表面距離)。体の大きさに左右されずカブトでも当たる
 const E_PUSH_START = 0.30;    // ★敵プッシュの前兆(この間 黄色く光る=ガード/かわしの猶予)。人間の反応に合わせる
 const E_PUSH_END = 0.50;      // 敵プッシュが当たる窓の終わり
 const E_PUSH_DURATION = 0.70; // 敵プッシュ全体
@@ -1060,9 +1227,9 @@ let aiPreset = null;
 const AI_PRESETS = {
   //                                                                                              readChance=読み成功率  reactDelay=反応時間(秒,短いほど速い)  patience=間合い重視度(0-1)
   1: { moveSpeed: 3.8, turnRate: 3.0, decideEvery: 0.7,  attackChance: 0.55, attackRange: 4.0, kb: 5.5, atkSpeed: 1.0,  chargeSpeed: 4.5, punish: true,  readChance: 0.55, reactDelay: 0.30, patience: 0.35 },
-  2: { moveSpeed: 5.8, turnRate: 4.6, decideEvery: 0.34, attackChance: 0.80, attackRange: 5.0, kb: 7.0, atkSpeed: 1.2,  chargeSpeed: 6.8, punish: true,  readChance: 0.80, reactDelay: 0.15, patience: 0.62 },
-  3: { moveSpeed: 7.6, turnRate: 7.2, decideEvery: 0.15, attackChance: 1.00, attackRange: 5.9, kb: 9.0, atkSpeed: 1.5,  chargeSpeed: 9.4, punish: true,  readChance: 0.98, reactDelay: 0.05, patience: 0.90 },
-  4: { moveSpeed: 9.2, turnRate: 12.0, decideEvery: 0.08, attackChance: 1.00, attackRange: 6.4, kb: 12.0, atkSpeed: 1.9, chargeSpeed: 11.5, punish: true,  readChance: 1.00, reactDelay: 0.02, patience: 0.96 },
+  2: { moveSpeed: 6.5, turnRate: 5.2, decideEvery: 0.27, attackChance: 0.88, attackRange: 5.3, kb: 7.5, atkSpeed: 1.3,  chargeSpeed: 7.6, punish: true,  readChance: 0.86, reactDelay: 0.12, patience: 0.58 },
+  3: { moveSpeed: 8.4, turnRate: 8.2, decideEvery: 0.12, attackChance: 1.00, attackRange: 6.3, kb: 9.5, atkSpeed: 1.6,  chargeSpeed: 10.2, punish: true,  readChance: 0.99, reactDelay: 0.04, patience: 0.86 },
+  4: { moveSpeed: 10.2, turnRate: 14.0, decideEvery: 0.06, attackChance: 1.00, attackRange: 6.9, kb: 12.5, atkSpeed: 2.0, chargeSpeed: 12.5, punish: true,  readChance: 1.00, reactDelay: 0.02, patience: 0.92 },
 };
 let aiDecideTimer = 0;
 let aiBehavior = 'approach';   // approach / strafeL / strafeR / wait
@@ -1194,6 +1361,16 @@ function startGrapple() {
   addDebugLog('🤼 掴み被り→組み合い開始');
 }
 function startEnemyAttack() {
+  // ★敵サフール: 状況判断。安全な時(遠い/相手スタン)だけザ・ワールド、近距離はキックで手堅く
+  if (enemy && enemy.userData && enemy.userData.bug === 'tong') {
+    const _ad = player ? Math.hypot(player.position.x - enemy.position.x, player.position.z - enemy.position.z) : 99;
+    if ((state === STATE.STUN || _ad > 6.5) && enemyStamina >= TW_COST) { startTheWorldE(); return; }
+    // 近距離 or スタミナ不足 → キック(プッシュ)
+    aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
+    enemyStamina -= 12; aiPushPower = Math.min(1, 0.6 + Math.random() * 0.35);
+    if (eCurrent) eCurrent.fadeOut(0.08);
+    return;
+  }
   aiAttacking = true;
   aiBiteResolved = false;
   enemyAttackActive = false;
@@ -1209,6 +1386,17 @@ function startEnemyAttack() {
   }
   addDebugLog('🤖 敵の攻撃！');
 }
+// ★敵サフールのプッシュ=キックモーション(プレイヤーのE押しと同じ技)
+function _eTongKick() {
+  if (!enemy || !enemy.userData || enemy.userData.bug !== 'tong') return;
+  const k = eActions['Tong_Attack'];
+  if (k) {
+    if (eCurrent && eCurrent !== k) eCurrent.fadeOut(0.08);
+    k.reset().setLoop(THREE.LoopOnce).setEffectiveTimeScale(1.6).play();
+    k.clampWhenFinished = false;
+    eCurrent = k;
+  }
+}
 
 // 難易度選択
 document.querySelectorAll('.diffBtn').forEach(btn => {
@@ -1216,6 +1404,7 @@ document.querySelectorAll('.diffBtn').forEach(btn => {
     e.preventDefault();
     aiLevel = parseInt(btn.dataset.level, 10);
     aiPreset = applyAiLearningToPreset(Object.assign({}, AI_PRESETS[aiLevel])); // ★学習ボーナス込みのコピー
+    // (虫の反映は読み込み時のモデル選択で完了済み)
     const ov = document.getElementById('diffOverlay');
     if (ov) ov.classList.add('hide');
     const _lv = aiLearnLevel();
@@ -1242,6 +1431,29 @@ document.querySelectorAll('.diffBtn').forEach(btn => {
   const _lv0 = aiLearnLevel();
   if (_dtEl && _lv0 > 0) _dtEl.textContent = `相手の強さを選んでスタート（🧠学習Lv${_lv0}）`;
 }
+// ★虫選択の配線
+{
+  const _bq = (location.search.match(/[?&]bug=(stag|kabuto|tong)/) || [])[1];
+  if (_bq) playerBug = _bq;
+  const _bugBtns = document.querySelectorAll('.bugBtn');
+  const _refreshBug = () => _bugBtns.forEach(b => {
+    const on = b.dataset.bug === playerBug;
+    b.style.borderColor = on ? '#ffcc55' : '#6b5a33';
+    b.style.boxShadow = on ? '0 0 16px rgba(255,190,80,0.55)' : 'none';
+    b.style.background = on ? 'rgba(72,52,20,0.92)' : 'rgba(40,30,15,0.85)';
+  });
+  _bugBtns.forEach(b => {
+    const pick = (e) => {
+      e.preventDefault();
+      if (b.dataset.bug !== playerBug) {
+        location.href = location.pathname + '?bug=' + b.dataset.bug; // ★実モデル差替のためリロードで反映
+      }
+    };
+    b.addEventListener('click', pick);
+    b.addEventListener('touchstart', pick);
+  });
+  _refreshBug();
+}
 // ★英語UI: 日本語圏以外のブラウザでは画面テキストを全部英語に
 if (IS_EN) {
   document.title = 'Stag Beetle Battle';
@@ -1262,6 +1474,13 @@ if (IS_EN) {
   _t('#diffTitle', _lvE > 0 ? `Choose your rival & START (🧠 AI Lv${_lvE})` : 'Choose your rival & START');
   const _dNames = { '1': '🐣 EASY', '2': '⚔️ NORMAL', '3': '🔥 HARD', '4': '💀 INSANE' };
   document.querySelectorAll('.diffBtn').forEach(b => { if (_dNames[b.dataset.level]) b.textContent = _dNames[b.dataset.level]; });
+  _t('#bugTitle', 'Choose your bug (rival species awaits)');
+  const _bbS = document.querySelector('.bugBtn[data-bug="stag"]');
+  if (_bbS) _bbS.textContent = '🪲 STAG BEETLE';
+  const _bbK = document.querySelector('.bugBtn[data-bug="kabuto"]');
+  if (_bbK) _bbK.textContent = '🦏 RHINO BEETLE';
+  const _bbT = document.querySelector('.bugBtn[data-bug="tong"]');
+  if (_bbT) _bbT.innerHTML = '🪵 TONG <span style="font-size:11px;color:#ffb37a;">NEW!</span>';
   _t('#learnResetBtn', '🧠 Reset AI memory');
   _t('#adPrivacy', 'Ads on this page may use cookies.');
   _t('#restartBtn', 'REMATCH!');
@@ -1565,7 +1784,78 @@ function addBeetleHair(rootObj, hairColor, count) {
 
 addDebugLog('GLB 読み込み開始');
 
+// ★2種読み込み: クワガタ(アニメ源)+本物カブト。両方揃ってからスポーン
+let stagGltf = null, kabutoGltf = null, _kabutoFailed = false;
+// ★カブト用: Canvasで手続き生成する甲羅の凹凸テクスチャ(1枚だけ作って使い回す)
+let _kabutoBumpMap = null;
+function _getKabutoBumpMap() {
+  if (_kabutoBumpMap) return _kabutoBumpMap;
+  const size = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  // 2種のノイズを合成: 大きな凹凸(甲羅の粒)+細かい肌理
+  const hash = (x, y) => {
+    let h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    return h - Math.floor(h);
+  };
+  const smoothNoise = (x, y, scale) => {
+    const xi = Math.floor(x * scale), yi = Math.floor(y * scale);
+    const xf = x * scale - xi, yf = y * scale - yi;
+    const a = hash(xi, yi), b = hash(xi+1, yi), c = hash(xi, yi+1), d = hash(xi+1, yi+1);
+    const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf);
+    return a*(1-u)*(1-v) + b*u*(1-v) + c*(1-u)*v + d*u*v;
+  };
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      const big = smoothNoise(u, v, 20);      // 大きい凹凸(甲羅の粒立ち)
+      const small = smoothNoise(u, v, 60);    // 細かい肌理
+      const g = Math.floor((big * 0.6 + small * 0.4) * 255);
+      const i = (y * size + x) * 4;
+      img.data[i] = g; img.data[i+1] = g; img.data[i+2] = g; img.data[i+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _kabutoBumpMap = new THREE.CanvasTexture(cv);
+  _kabutoBumpMap.wrapS = _kabutoBumpMap.wrapT = THREE.RepeatWrapping;
+  _kabutoBumpMap.repeat.set(5, 5);
+  return _kabutoBumpMap;
+}
+
+let _tongFailed = false;
+function _tryInitChars() {
+  if (!stagGltf) return;
+  if (!kabutoGltf && !_kabutoFailed) return;
+  if (!tongGltf && !_tongFailed) return;
+  initCharacters(stagGltf);
+}
+// ★カブトGLB(クワガタ整形版): 大顎除去+頭縮小+前胸ドーム+甲羅膨らみ。動きはクワガタと100%同一
+new GLTFLoader().load('kabuto_beetle.glb',
+  (g) => { kabutoGltf = g; addDebugLog('✅ カブトGLB読込'); _tryInitChars(); },
+  undefined,
+  () => { _kabutoFailed = true; addDebugLog('⚠️ カブトGLB読込失敗→角付き方式で代替'); _tryInitChars(); });
+// ★3体目 Tong Tong Tong Sahur 系(独立モデル、独自リグ)
+let tongGltf = null;
+new GLTFLoader().load('tong_beetle.glb',
+  (g) => { tongGltf = g; addDebugLog('✅ Tong GLB読込'); _tryInitChars(); },
+  undefined,
+  () => { _tongFailed = true; addDebugLog('⚠️ Tong GLB読込失敗'); _tryInitChars(); });
 loader.load('stag_beetle.glb', (gltf) => {
+  stagGltf = gltf;
+  addDebugLog('📦 クワガタGLB受信');
+  _tryInitChars();
+}, (p) => {
+  const pct = p.total > 0 ? Math.round(p.loaded / p.total * 100) : 0;
+  document.getElementById('loadingPercent').textContent = `${pct}%`;
+}, (err) => {
+  addDebugLog(`❌ ${err.message}`);
+  document.getElementById('loading').innerHTML =
+    `<div>❌ 読み込みエラー</div><div style="font-size:14px;margin-top:10px;color:#ff9999;">${err.message||'ファイルが見つかりません'}</div>`;
+});
+
+function initCharacters(gltf) {
  try {
   addDebugLog(`✅ GLB完了 / アニメ${gltf.animations.length}個`);
 
@@ -1583,31 +1873,158 @@ loader.load('stag_beetle.glb', (gltf) => {
   addDebugLog(`↔️横歩き:${strafeAnimName || 'なし'}`);
 
   // ---- プレイヤー（P1）----
-  player = gltf.scene;
-  player.scale.set(0.5, 0.5, 0.5);
+  // ★虫選択を実モデルで反映(相手は自動でライバル種)
+  const _pIsK = (playerBug === 'kabuto');
+  const _pIsT = (playerBug === 'tong');
+  const _realK = !!kabutoGltf;
+  const _realT = !!tongGltf;
+  addDebugLog(`🎮 playerBug=${playerBug} _pIsT=${_pIsT} _realT=${_realT} _pIsK=${_pIsK} _realK=${_realK}`);
+  if (_pIsT && _realT) {
+    player = SkeletonUtils.clone(tongGltf.scene);
+    player.userData.bug = 'tong';
+    addDebugLog('🪵 Tongモデルで生成');
+  } else if (_pIsK && _realK) {
+    player = SkeletonUtils.clone(kabutoGltf.scene);
+    player.userData.bug = 'kabuto';
+    player.scale.setScalar(1.1);
+  } else {
+    player = gltf.scene;
+    player.userData.bug = 'stag';
+  }
+  // ★Tongは元サイズが大きいので、他の虫に合わせて小さめに
+  if (player.userData.bug === 'tong') {
+    // 新モデル(高さ9.9m)なので0.22倍でクワガタの背丈に合わせる
+    player.scale.set(0.22, 0.22, 0.22);
+    // ★モデルの原点が体中心なので、中身を上に持ち上げて足元を地面(y=0)に合わせる
+    // Tungモデルの足底がローカルZ=-4.55 → 0.22倍で -1.0
+    // player.scale適用後の座標系なので、rawの持ち上げ量 = 4.55(0.22で縮まる前の値)
+    player.traverse(o => {
+      if (o.isMesh || o.isBone) {
+        // 直接メッシュや骨を動かすのはリスク高い → 代わりにルートの子供を持ち上げる
+      }
+    });
+    // 代替: 持ち上げのみ
+    if (player.children.length > 0) {
+      player.children.forEach(c => { c.position.y += 4.55; });
+    }
+    // ★確実版: GLBバット(スキンでズレる)を破棄→骨スケール実測補正したJSバットを右手ボーンに直付け
+    setTimeout(() => {
+      let rightHand = null, handEnd = null;
+      const junkBats = [];
+      player.traverse(o => {
+        if (o.isMesh && (o.name === 'TongBat' || o.name.startsWith('円錐') || o.name.startsWith('円柱'))) junkBats.push(o);
+        if (o.isBone) {
+          const n = o.name.toLowerCase();
+          if (n.includes('righthand')) {
+            if (n.includes('end')) { if (!handEnd) handEnd = o; }
+            else { if (!rightHand) rightHand = o; }
+          }
+        }
+      });
+      junkBats.forEach(m => { if (m.parent) m.parent.remove(m); });
+      if (rightHand) {
+        // 骨のワールドスケールを実測(モデル内部圧縮×ゲームスケールを補正)
+        rightHand.updateMatrixWorld(true);
+        const _ws = new THREE.Vector3();
+        rightHand.getWorldScale(_ws);
+        const s = Math.max(_ws.x, 1e-6);
+        const L  = 1.35 / s;  // 画面上1.35ユニット相当(先端が地面に触れる程度)
+        const Rg = 0.10 / s;  // グリップ半径
+        const Rt = 0.17 / s;  // 先端半径(テーパー)
+        const geo = new THREE.CylinderGeometry(Rt, Rg, L, 12);
+        geo.translate(0, L / 2, 0); // グリップ端を原点に=手が握る位置
+        const bat = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+          color: 0x8b5a2b, roughness: 0.75, metalness: 0.0
+        }));
+        bat.name = 'JSBat';
+        // 骨の伸びる方向(=子endボーンの向き)に沿わせて腕の延長線に
+        let dir = new THREE.Vector3(0, 1, 0);
+        if (handEnd && handEnd.parent === rightHand && handEnd.position.lengthSq() > 1e-8) {
+          dir = handEnd.position.clone().normalize();
+        }
+        bat.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        rightHand.add(bat);
+        window._tongBat = bat; // 毎フレームの向き固定用に参照保存
+        addDebugLog(`🏏 バット装着OK s=${s.toFixed(4)} L=${L.toFixed(0)}`);
+      } else {
+        addDebugLog('⚠️ 右手ボーンなし');
+      }
+    }, 300);
+  } else {
+    player.scale.set(0.5, 0.5, 0.5);
+  }
   player.position.set(0, 0, 8);
   player.rotation.y = Math.PI; // 相手（奥）を向く
-  // GLB内の余分なメッシュ(ICO球/ThrowBall等)を先に除外
-  const junkMeshes = [];
-  player.traverse(o => {
-    if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh) {
-      junkMeshes.push(o);
-    }
-  });
-  for (const m of junkMeshes) { if (m.parent) m.parent.remove(m); }
-  if (junkMeshes.length) addDebugLog(`🗑️ 余分メッシュ除外: ${junkMeshes.map(m=>m.name).join(',')}`);
+  // GLB内の余分なメッシュ(ICO球/ThrowBall等)を先に除外(Tongは全メッシュ保持=バット・本体とも必要)
+  if (player.userData.bug !== 'tong') {
+    const junkMeshes = [];
+    player.traverse(o => {
+      if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh && !o.name.startsWith('Kabuto')) {
+        junkMeshes.push(o);
+      }
+    });
+    for (const m of junkMeshes) { if (m.parent) m.parent.remove(m); }
+    if (junkMeshes.length) addDebugLog(`🗑️ 余分メッシュ除外: ${junkMeshes.map(m=>m.name).join(',')}`);
+  }
   player.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true; o.receiveShadow = true;
-      // ★実物寄り：元テクスチャの模様を活かしつつ赤銅のクリアコート殻に
-      o.material = makeBeetleMaterial(o.material, 0xa06838);
+      // ★クワガタ=赤銅殻化 / カブト=凹凸テクスチャ / Tong=PBR素材そのまま
+      if (player.userData.bug === 'tong') {
+        // Tongは元のPBRテクスチャをそのまま使う(何もしない)
+      } else if (player.userData.bug === 'kabuto') {
+        if (o.geometry && o.geometry.attributes.normal) {
+          o.geometry.deleteAttribute('normal');
+          o.geometry.computeVertexNormals();
+        }
+        if (o.material.metalness !== undefined) {
+          o.material.flatShading = true;
+          o.material.bumpMap = _getKabutoBumpMap();
+          o.material.bumpScale = 0.05;
+          o.material.needsUpdate = true;
+        }
+      } else {
+        o.material = makeBeetleMaterial(o.material, 0xa06838);
+      }
     }
   });
   scene.add(player);
 
   playerMixer = new THREE.AnimationMixer(player);
-  gltf.animations.forEach(clip => { pActions[clip.name] = playerMixer.clipAction(clip); });
+  // ★Tongは独自GLBのアニメを使う、他はクワガタGLBのアニメ
+  if (player.userData.bug === 'tong' && tongGltf) {
+    tongGltf.animations.forEach(clip => { pActions[clip.name] = playerMixer.clipAction(clip); });
+    addDebugLog(`🪵 Tong独自アニメ: ${tongGltf.animations.map(a=>a.name).join(',')}`);
+    // 新モデルのアニメ名を探す(Armature|walk 優先、なければ最初の1つ)
+    const _tongClipName = pActions['Armature|walk'] ? 'Armature|walk' :
+                          pActions['Tong_Idle'] ? 'Tong_Idle' :
+                          Object.keys(pActions)[0];
+    const _idle = pActions[_tongClipName];
+    if (_idle) {
+      _idle.reset();
+      _idle.setLoop(THREE.LoopRepeat, Infinity);
+      _idle.setEffectiveTimeScale(1.0);
+      _idle.setEffectiveWeight(1.0);
+      _idle.play();
+      pCurrent = _idle;
+      addDebugLog(`🪵 Tong再生開始: ${_tongClipName}`);
+    } else {
+      addDebugLog('❌ Tongアニメが見つからない!');
+    }
+  } else {
+    gltf.animations.forEach(clip => { pActions[clip.name] = playerMixer.clipAction(clip); });
+  }
   pBones = cacheBones(player);
+  pColliders = buildColliderSet(player.userData.bug);
+  addDebugLog(`🛡 P1コライダー: ${player.userData.bug} full=${pColliders.full.length} body=${pColliders.body.length}`);
+  if (player.userData.bug === 'kabuto') {
+    if (!kabutoGltf) {
+      applyKabutoLook(player, pBones); _kabutoBonesP = pBones; // フォールバック=角付きクワガタ
+    } else {
+      // 実カブトGLB: 大顎はメッシュから除去済み、角だけ生やす
+      _addHornsOnly(player, pBones);
+    }
+  }
   // プレイヤーの全ボーン初期姿勢も保存(被弾React後の復元用)
   player.traverse(o => {
     if (o.isBone) {
@@ -1619,15 +2036,48 @@ loader.load('stag_beetle.glb', (gltf) => {
     }
   });
   computeLocalForward(player, pBones);
+  // ★Tongは骨名がMixamo系なので上記関数が動かない → 手動でlocalForwardを設定
+  //   Tongモデルは顔が+Z方向なので localForward = (0, 0, 1)
+  if (player.userData.bug === 'tong') {
+    localForward.set(0, 0, 1);
+    addDebugLog('🪵 Tong用 localForward = (0, 0, 1) 手動設定');
+  }
   addDebugLog(`➡️ 前方向算出: (${localForward.x.toFixed(2)}, ${localForward.z.toFixed(2)})`);
 
   // ---- 相手（P2）: 同じモデルを複製して赤く ----
-  enemy = SkeletonUtils.clone(gltf.scene);
+  // ★敵の虫選択: ランダム！(?enemy=stag|kabuto|tong で固定も可能)
+  //   敵も自キャラと同性能: 敵サフールはキック&ザ・ワールドを使ってくる
+  let _eBug;
+  {
+    const _pool = ['stag'];
+    if (_realK) _pool.push('kabuto');
+    if (_realT) _pool.push('tong');
+    const _eq = (location.search.match(/[?&]enemy=(stag|kabuto|tong)/) || [])[1];
+    _eBug = (_eq && _pool.includes(_eq)) ? _eq : _pool[Math.floor(Math.random() * _pool.length)];
+    if (online && window._forceEnemyBug) _eBug = window._forceEnemyBug; // オンラインは両者同一(stag)で確定
+  }
+  addDebugLog(`🎲 敵キャラ: ${_eBug}`);
+  if (_eBug === 'tong' && _realT) {
+    enemy = SkeletonUtils.clone(tongGltf.scene);
+  } else if (_eBug === 'kabuto' && _realK) {
+    enemy = SkeletonUtils.clone(kabutoGltf.scene);
+  } else {
+    _eBug = (_eBug === 'stag') ? 'stag' : _eBug; // GLB未読込時はstagにフォールバック
+    if ((_eBug === 'kabuto' && !_realK) || (_eBug === 'tong' && !_realT)) _eBug = 'stag';
+    enemy = SkeletonUtils.clone(gltf.scene);
+  }
+  enemy.userData.bug = _eBug;
   // ★重要：クローン元(player)の回転πが、オイラー角(x:180°, z:180°)という
   //   等価な別分解でコピーされてしまう。これが残ると rotation.y の操作が
   //   逆向きに効く座標系になり、AIが真逆を向いて固まる。完全リセットで除去。
   enemy.rotation.set(0, 0, 0);
-  enemy.scale.set(0.5, 0.5, 0.5);
+  if (_eBug === 'tong') {
+    // サフール敵: プレイヤー版と同じスケール/足元合わせ
+    enemy.scale.set(0.22, 0.22, 0.22);
+    if (enemy.children.length > 0) enemy.children.forEach(c => { c.position.y += 4.55; });
+  } else {
+    enemy.scale.set(0.5, 0.5, 0.5);
+  }
   enemy.position.set(0, 0, -8);
   // プレイヤーの方を向く(実測localForwardから自動計算。モデル規約が変わっても正しい)
   {
@@ -1642,8 +2092,8 @@ loader.load('stag_beetle.glb', (gltf) => {
     addDebugLog(`🧭 敵スポーン: dot=${_dot.toFixed(2)} (1=正対/-1=真逆) lf=(${localForward.x.toFixed(2)},${localForward.z.toFixed(2)}) rot=${(enemy.rotation.y*180/Math.PI).toFixed(0)}°`);
   }
   const junkMeshes2 = [];
-  enemy.traverse(o => {
-    if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh) {
+  if (enemy.userData.bug !== 'tong') enemy.traverse(o => {
+    if (o.isMesh && !o.name.startsWith('Cyclommatinus') && !o.isSkinnedMesh && !o.name.startsWith('Kabuto')) {
       junkMeshes2.push(o);
     }
   });
@@ -1651,15 +2101,84 @@ loader.load('stag_beetle.glb', (gltf) => {
   enemy.traverse(o => {
     if (o.isMesh) {
       o.castShadow = true; o.receiveShadow = true;
-      // ★深い赤黒のクリアコート殻。プレイヤーと差別化しつつ実物寄り
-      o.material = makeBeetleMaterial(o.material, 0x6a241a);
+      // ★クワガタ=深い赤黒殻 / カブト=Blenderの色+フラット+手続き凹凸 / Tong=元テクスチャ+赤味(敵識別)
+      if (enemy.userData.bug === 'tong') {
+        o.material = o.material.clone();
+        if (o.material.color) o.material.color.setRGB(1.0, 0.6, 0.55);
+      } else if (enemy.userData.bug === 'kabuto') {
+        if (o.geometry && o.geometry.attributes.normal) {
+          o.geometry.deleteAttribute('normal');
+          o.geometry.computeVertexNormals();
+        }
+        if (o.material.metalness !== undefined) {
+          o.material.flatShading = true;
+          o.material.bumpMap = _getKabutoBumpMap();
+          o.material.bumpScale = 0.05;
+          o.material.needsUpdate = true;
+        }
+      } else {
+        o.material = makeBeetleMaterial(o.material, 0x6a241a);
+      }
     }
   });
   scene.add(enemy);
+  // ★敵サフールにもJSバット装着(プレイヤー版と同じ実測スケール方式)
+  if (enemy.userData.bug === 'tong') {
+    setTimeout(() => {
+      let rightHandE = null, handEndE = null;
+      enemy.traverse(o => {
+        if (o.isBone) {
+          const n = o.name.toLowerCase();
+          if (n.includes('righthand')) {
+            if (n.includes('end')) { if (!handEndE) handEndE = o; }
+            else { if (!rightHandE) rightHandE = o; }
+          }
+        }
+      });
+      if (rightHandE) {
+        rightHandE.updateMatrixWorld(true);
+        const _wsE = new THREE.Vector3();
+        rightHandE.getWorldScale(_wsE);
+        const sE = Math.max(_wsE.x, 1e-6);
+        const LE = 1.35 / sE, RgE = 0.10 / sE, RtE = 0.17 / sE;
+        const geoE = new THREE.CylinderGeometry(RtE, RgE, LE, 12);
+        geoE.translate(0, LE / 2, 0);
+        const batE = new THREE.Mesh(geoE, new THREE.MeshStandardMaterial({ color: 0x5e2f16, roughness: 0.8, metalness: 0.0 }));
+        batE.name = 'JSBatE';
+        let dirE = new THREE.Vector3(0, 1, 0);
+        if (handEndE && handEndE.parent === rightHandE && handEndE.position.lengthSq() > 1e-8) dirE = handEndE.position.clone().normalize();
+        batE.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dirE);
+        rightHandE.add(batE);
+        window._tongBatE = batE;
+        addDebugLog('🏏 敵バット装着OK');
+      }
+    }, 300);
+  }
 
   enemyMixer = new THREE.AnimationMixer(enemy);
-  gltf.animations.forEach(clip => { eActions[clip.name] = enemyMixer.clipAction(clip); });
+  if (enemy.userData.bug === 'tong' && tongGltf) {
+    // ★敵サフール: 独自クリップを読み込み、クワガタのアニメ名にエイリアス(既存AIコードがそのまま動く)
+    tongGltf.animations.forEach(clip => { eActions[clip.name] = enemyMixer.clipAction(clip); });
+    if (eActions['Armature|walk']) {
+      if (walkAnimName) eActions[walkAnimName] = eActions['Armature|walk'];
+      eActions['Carry_Walk'] = eActions['Armature|walk'];
+      if (strafeAnimName) eActions[strafeAnimName] = eActions['Armature|walk'];
+    }
+    if (attackAnimName && eActions['Tong_Charge']) eActions[attackAnimName] = eActions['Tong_Charge'];
+    addDebugLog(`🪵 敵Tongアニメ: ${tongGltf.animations.map(a=>a.name).join(',')}`);
+  } else {
+    gltf.animations.forEach(clip => { eActions[clip.name] = enemyMixer.clipAction(clip); });
+  }
   eBones = cacheBones(enemy);
+  eColliders = buildColliderSet(enemy.userData.bug);
+  addDebugLog(`🛡 P2コライダー: ${enemy.userData.bug} full=${eColliders.full.length} body=${eColliders.body.length}`);
+  if (enemy.userData.bug === 'kabuto') {
+    if (!kabutoGltf) {
+      applyKabutoLook(enemy, eBones); _kabutoBonesE = eBones;
+    } else {
+      _addHornsOnly(enemy, eBones);
+    }
+  }
   // ★ロード時の全ボーンの初期姿勢(=レストポーズ)を保存。React終了時にこれで復元する。
   //   skeleton.pose() は root bone の親が Object3D の場合、局所行列に bind時ワールド行列を
   //   代入してしまう仕様のせいで、enemy が動いた後だと不整合になる。手動保存が確実。
@@ -1770,14 +2289,7 @@ loader.load('stag_beetle.glb', (gltf) => {
   document.getElementById('loading').innerHTML =
     `<div>❌ エラー</div><div style="font-size:14px;margin-top:10px;color:#ff9999;">${e.message}</div>`;
  }
-}, (p) => {
-  const pct = p.total > 0 ? Math.round(p.loaded / p.total * 100) : 0;
-  document.getElementById('loadingPercent').textContent = `${pct}%`;
-}, (err) => {
-  addDebugLog(`❌ ${err.message}`);
-  document.getElementById('loading').innerHTML =
-    `<div>❌ 読み込みエラー</div><div style="font-size:14px;margin-top:10px;color:#ff9999;">${err.message||'ファイルが見つかりません'}</div>`;
-});
+}
 
 // ★実行時エラーを画面デバッグに出す(エラーが出るとそのフレームの描画が飛ぶ=カクつき犯人の特定用)
 window.addEventListener('error', (ev) => {
@@ -1788,20 +2300,28 @@ window.addEventListener('unhandledrejection', (ev) => {
 });
 // ========== 入力 ==========
 const keys = {};
+// ★押下/解放ラッチ: 低FPS時に「押して離した」が1フレームの間に収まっても取りこぼさない
+//   (重いPCでスペース攻撃が反応しない問題の根本対策。フレームサンプリングではなくイベントで記録)
+const keyDownEdge = {}, keyUpEdge = {};
 window.addEventListener('keydown', e => {
+  if (!keys[e.code]) keyDownEdge[e.code] = true;
   keys[e.code] = true;
   if (e.code === 'KeyQ') {
     lockOnActive = !lockOnActive;
     addDebugLog(lockOnActive ? '🎯 ロックオン ON' : '🎯 ロックオン OFF');
   }
+  // ★Tキー: 敵がサフールなら即ザ・ワールドを撃たせる(デモ/テスト用)
+  if (e.code === 'KeyT' && enemy && enemy.userData && enemy.userData.bug === 'tong' && !gameOver) {
+    startTheWorldE();
+  }
 });
-window.addEventListener('keyup',   e => { keys[e.code] = false; });
+window.addEventListener('keyup',   e => { keys[e.code] = false; keyUpEdge[e.code] = true; });
 
 function setupButton(id, code) {
   const btn = document.getElementById(id);
   if (!btn) return;
-  const on  = (e) => { if (e) e.preventDefault(); keys[code] = true;  btn.classList.add('active'); };
-  const off = (e) => { if (e) e.preventDefault(); keys[code] = false; btn.classList.remove('active'); };
+  const on  = (e) => { if (e) e.preventDefault(); if (!keys[code]) keyDownEdge[code] = true; keys[code] = true;  btn.classList.add('active'); };
+  const off = (e) => { if (e) e.preventDefault(); keys[code] = false; keyUpEdge[code] = true; btn.classList.remove('active'); };
   btn.addEventListener('touchstart', on);
   btn.addEventListener('touchend', off);
   btn.addEventListener('touchcancel', off); // 指が外れた/中断された時も確実に解除
@@ -1939,7 +2459,7 @@ function setGlow(who, colorHex, intensity) {
 // FREE: 通常歩行
 // STANCE: Space押しっぱで顎を開いた構え状態。移動可能(W押しなら突進)。離すと噛む
 // BITING: 噛みつきモーション再生中。移動不可。噛み判定はこの状態で発火
-const STATE = { FREE: 'free', STANCE: 'stance', BITING: 'biting', CARRYING: 'carrying', PUSHING: 'pushing', PUSH_CHARGE: 'push_charge', STUN: 'stun' };
+const STATE = { FREE: 'free', STANCE: 'stance', BITING: 'biting', CARRYING: 'carrying', PUSHING: 'pushing', PUSH_CHARGE: 'push_charge', STUN: 'stun', THEWORLD: 'theworld' };
 const ENEMY_STATE = { FREE: 'free', GRIPPED: 'gripped', REACTING: 'reacting' };
 let state = STATE.FREE;
 let enemyState = ENEMY_STATE.FREE;
@@ -2013,11 +2533,467 @@ let _perfFrames = 0, _perfAcc = 0, _perfWorst = 0, _perfLastSpikeLog = 0; // カ
 let _renderScale = 1;                 // ★自動解像度調整(重い時に下げてFPS優先)
 // (影は完全になし: 要望により偽影も撤去)
 const _rightV = new THREE.Vector3(); // 毎フレーム生成防止(ロックオン横移動用)
+
+// ========== ⏱ ザ・ワールド(時よ止まれ)：サフール専用の必殺・時間停止 ==========
+//   Space発動 → 敵と世界が静止 → サフールが「無駄無駄」ラッシュ → 特大ノックバックで解放
+let worldStopped = false;             // trueの間、敵の思考/移動/アニメを凍結
+let twCooldown = 0, tweCooldown = 0;  // ザ・ワールドの再使用インターバル(残り秒)
+// ===== 🌐 オンライン対戦(P2P・ホスト権威) =====
+let online = false;
+let _pMoving = false;
+const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, lastSend: 0, _eWalk: false };
+const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
+const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
+const TW_CHARGE  = 1.0;               // ★発動までの溜め(1秒)。この間に殴られると中断=対処可能
+const TW_CALLOUT = 0.4;               // 「時よ止まれ」発動直後の静止(短め)
+const TW_RUSH    = 1.7;               // 無駄無駄ラッシュの長さ(強すぎたので短縮)
+const TW_RELEASE = 0.5;               // 「時よ動き出す」→解放までの間
+const TW_HIT_INTERVAL = 0.11;         // ラッシュ1発ごとの間隔(小さいほど連打が速い)
+const TW_COST = 35;                   // 発動スタミナ消費
+let _twDom = null, _twAudioCtx = null;
+
+function _twAC() {
+  try {
+    if (!_twAudioCtx) _twAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_twAudioCtx.state === 'suspended') _twAudioCtx.resume();
+  } catch (e) { return null; }
+  return _twAudioCtx;
+}
+function _twBeep(freq, dur, type, gain, when) {
+  const ac = _twAC(); if (!ac) return;
+  const t0 = ac.currentTime + (when || 0);
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || 'square'; o.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain || 0.2, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function _twBoom() {
+  const ac = _twAC(); if (!ac) return;
+  const t0 = ac.currentTime;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(240, t0); o.frequency.exponentialRampToValueAtTime(38, t0 + 0.5);
+  g.gain.setValueAtTime(0.45, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.6);
+  o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0 + 0.65);
+}
+function ensureTWDom() {
+  if (_twDom) return _twDom;
+  const wrap = document.createElement('div');
+  wrap.id = 'twOverlay';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;transition:opacity 0.18s;' +
+    'background:radial-gradient(circle at 50% 45%, rgba(90,0,140,0.12), rgba(30,0,55,0.62) 68%, rgba(8,0,18,0.9));';
+  const fx = document.createElement('div');
+  fx.id = 'twFx'; fx.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
+  wrap.appendChild(fx);
+  document.body.appendChild(wrap);
+  _twDom = { wrap, fx };
+  return _twDom;
+}
+// ワールド座標→画面%(波紋をキャラの位置から出すため)
+function _projPct(obj, yOff) {
+  if (!obj || typeof camera === 'undefined' || !camera) return { x: 50, y: 46 };
+  const v = obj.position.clone(); v.y += (yOff || 1.4);
+  v.project(camera);
+  return { x: (v.x * 0.5 + 0.5) * 100, y: (-v.y * 0.5 + 0.5) * 100 };
+}
+const _twRaf = (typeof requestAnimationFrame !== 'undefined') ? requestAnimationFrame : (fn) => { try { fn(); } catch (e) {} };
+// 波紋(広がって消えるリング)。文字は一切使わない
+function _spawnRipple(xPct, yPct, color, maxScale, dur) {
+  const d = ensureTWDom();
+  const sz = 70, sc = maxScale || 9, dd = dur || 0.9;
+  const r = document.createElement('div');
+  r.style.cssText = 'position:absolute;left:' + xPct + '%;top:' + yPct + '%;width:' + sz + 'px;height:' + sz + 'px;' +
+    'margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;border:3px solid ' + color + ';' +
+    'box-shadow:0 0 22px ' + color + ', inset 0 0 16px ' + color + ';transform:scale(0.12);opacity:0.85;' +
+    'transition:transform ' + dd + 's cubic-bezier(0.12,0.62,0.24,1), opacity ' + dd + 's ease-out;pointer-events:none;';
+  d.fx.appendChild(r);
+  _twRaf(() => { r.style.transform = 'scale(' + sc + ')'; r.style.opacity = '0'; });
+  setTimeout(() => { if (r.parentNode) r.parentNode.removeChild(r); }, dd * 1000 + 140);
+}
+function startTheWorld() {
+  if (TW.active) { addDebugLog('⏱ 発動不可(実行中)'); return false; }
+  if (typeof TWE !== 'undefined' && TWE.active) { addDebugLog('⏱ 発動不可(敵の時間停止中)'); return false; }
+  if (gameOver || !player || !enemy) { addDebugLog('⏱ 発動不可(gameOver/未生成)'); return false; }
+  if (twCooldown > 0) {
+    setStatus('⏱ ザ・ワールドは再使用まであと' + Math.ceil(twCooldown) + '秒', false);
+    addDebugLog('⏱ ザ・ワールドCD中(' + twCooldown.toFixed(1) + 's)');
+    return false;
+  }
+  if (stamina < TW_COST) {
+    setStatus('💤 スタミナ不足…ザ・ワールドには' + TW_COST + '必要', false);
+    addDebugLog('💤 ザ・ワールド不発(スタミナ' + Math.floor(stamina) + '/' + TW_COST + ')');
+    return false;
+  }
+  stamina -= TW_COST;
+  TW.active = true; TW.phase = 'charge'; TW.t = 0; TW.hitTimer = 0; TW.hits = 0; TW.kb = 0; TW.rip = 0;
+  worldStopped = false;              // ★溜め中はまだ止めない(相手は自由に動ける=殴って止められる)
+  state = STATE.THEWORLD;            // 自分は1秒間コミット(動けない=リスク)
+  playerVelX = 0; playerVelZ = 0;
+  aiDecideTimer = 0;                 // ★敵は即動ける=溜めを潰しに来られる
+  TW.dir.set(enemy.position.x - player.position.x, 0, enemy.position.z - player.position.z);
+  if (TW.dir.lengthSq() < 1e-4) TW.dir.set(0, 0, 1);
+  TW.dir.normalize();
+  faceDir(player, TW.dir.x, TW.dir.z);
+  const _tc = pActions['Tong_Charge'];
+  if (_tc) { if (pCurrent && pCurrent !== _tc) pCurrent.fadeOut(0.08); _tc.reset().setLoop(THREE.LoopOnce).play(); _tc.time = 0.2; _tc.paused = true; _tc.setEffectiveWeight(1); pCurrent = _tc; }
+  const d = ensureTWDom();
+  d.wrap.style.background = 'transparent';   // 溜め中は画面を暗くしない(相手が見える)
+  d.wrap.style.opacity = '1'; d.fx.innerHTML = '';
+  { const _p = _projPct(player, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(190,120,255,0.7)', 6, 0.7); }
+  setStatus('⏱ ザ・ワールド発動まで1秒…殴られたら止まる！', true);
+  addDebugLog('⏱ ザ・ワールド溜め開始(1秒)');
+  _twBeep(120, 0.15, 'square', 0.12);
+  return true;
+}
+function endTheWorld() {
+  TW.active = false; TW.phase = ''; worldStopped = false;
+  twCooldown = TW_COOLDOWN;
+  if (state === STATE.THEWORLD) state = STATE.FREE;
+  const d = ensureTWDom(); d.wrap.style.opacity = '0'; d.fx.innerHTML = '';
+  if (pCurrent) pCurrent.paused = false;
+}
+// 溜め中の術者が殴られたか(=中断条件)。kb/スタン/掴まれ/投げられ を検知
+function _twCasterHit(who) {
+  if (who === 'player') {
+    return (Math.hypot(pKbX, pKbZ) > 1.5) || state === STATE.STUN || playerCarried || playerThrown;
+  }
+  return (Math.hypot(eKbX, eKbZ) > 1.5) || aiStunned || enemyState === ENEMY_STATE.GRIPPED || enemyState === ENEMY_STATE.REACTING;
+}
+function cancelTheWorld(reason) {
+  TW.active = false; TW.phase = ''; worldStopped = false;
+  twCooldown = TW_COOLDOWN;
+  if (state === STATE.THEWORLD) state = STATE.FREE;
+  const d = ensureTWDom(); d.wrap.style.opacity = '0'; d.fx.innerHTML = '';
+  if (pCurrent) pCurrent.paused = false;
+  setStatus('⏱ ザ・ワールドを止められた！', false);
+  addDebugLog('⏱ ザ・ワールド中断(' + reason + ')');
+  _twBeep(140, 0.3, 'sawtooth', 0.18); _twBeep(70, 0.4, 'sine', 0.2, 0.05);
+}
+function updateTheWorld(dt) {
+  if (!TW.active || !player) return;
+  const d = ensureTWDom();
+  TW.t += dt;
+  if (TW.phase === 'charge') {
+    // ★溜め中: 相手は自由(worldStopped=false)。殴られたら中断=対処可能に
+    if (_twCasterHit('player')) { cancelTheWorld('殴られた'); return; }
+    const prog = Math.min(1, TW.t / TW_CHARGE);
+    if (enemy) {
+      const dx = enemy.position.x - player.position.x, dz = enemy.position.z - player.position.z;
+      if (dx * dx + dz * dz > 1e-4) { faceDir(player, dx, dz); TW.dir.set(dx, 0, dz).normalize(); }
+    }
+    TW.rip -= dt;
+    if (TW.rip <= 0) {
+      TW.rip = 0.34 - prog * 0.22; // 発動が近いほど波紋が速く
+      const _p = _projPct(player, 1.4);
+      _spawnRipple(_p.x, _p.y, 'rgba(190,120,255,' + (0.4 + prog * 0.45).toFixed(2) + ')', 4 + prog * 8, 0.65);
+      _twBeep(300 + prog * 400, 0.05, 'square', 0.10);
+    }
+    setStatus('⏱ ザ・ワールドまで' + Math.ceil(TW_CHARGE - TW.t) + '…殴って止めろ！', true);
+    if (TW.t >= TW_CHARGE) {
+      // ★溜め完了→ついに時間停止発動！
+      TW.phase = 'callout'; TW.t = 0;
+      worldStopped = true;
+      playerVelX = 0; playerVelZ = 0; pKbX = 0; pKbZ = 0; eKbX = 0; eKbZ = 0;
+      cancelEnemyAttack();
+      aiDecideTimer = Math.max(aiDecideTimer || 0, TW_CALLOUT + TW_RUSH + TW_RELEASE + 0.5);
+      d.wrap.style.background = 'radial-gradient(circle at 50% 45%, rgba(90,0,140,0.12), rgba(30,0,55,0.62) 68%, rgba(8,0,18,0.9))';
+      setStatus('⏱ 時間停止！', true);
+      shakeTime = 0.3; shakeIntensity = 0.25;
+      _twBeep(160, 0.5, 'sawtooth', 0.25); _twBeep(88, 0.95, 'sine', 0.3, 0.05);
+      { const _p = _projPct(player, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(190,120,255,0.9)', 13, 1.1); }
+    }
+    return;
+  }
+  if (TW.phase === 'callout') {
+    TW.rip -= dt;
+    if (TW.rip <= 0) { TW.rip = 0.16; const _p = _projPct(player, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(190,120,255,0.85)', 12, 1.05); }
+    if (TW.t >= TW_CALLOUT) {
+      TW.phase = 'rush'; TW.t = 0;
+      _twBeep(520, 0.06, 'square', 0.15);
+    }
+  } else if (TW.phase === 'rush') {
+    if (enemy) {
+      const dx = enemy.position.x - player.position.x, dz = enemy.position.z - player.position.z;
+      const dist = Math.hypot(dx, dz), target = 1.7;
+      if (dist > target) {
+        const ux = dx / dist, uz = dz / dist, step = Math.min(dist - target, 15 * dt);
+        player.position.x += ux * step; player.position.z += uz * step;
+      }
+      faceDir(player, dx, dz);
+      const _twR = Math.hypot(player.position.x, player.position.z);
+      const _twRM = STUMP_RADIUS - 0.6;
+      if (_twR > _twRM) { player.position.x *= _twRM / _twR; player.position.z *= _twRM / _twR; }
+    }
+    TW.hitTimer -= dt;
+    if (TW.hitTimer <= 0) {
+      TW.hitTimer = TW_HIT_INTERVAL;
+      TW.hits++;
+      const clip = (TW.hits % 2 === 0) ? 'Tong_Attack' : 'Tong_Charge';
+      const a = pActions[clip];
+      if (a) { a.reset().setLoop(THREE.LoopOnce).play(); a.setEffectiveTimeScale(2.6); a.paused = false; pCurrent = a; }
+      { const _ep = _projPct(enemy, 1.2); _spawnRipple(_ep.x + (Math.random() - 0.5) * 4, _ep.y + (Math.random() - 0.5) * 4, 'rgba(205,150,255,0.9)', 5.5, 0.55); }
+      if (enemy) { const sp = enemy.position.clone(); sp.y = 1.2 + Math.random() * 0.7; sp.x += (Math.random() - 0.5) * 0.7; sp.z += (Math.random() - 0.5) * 0.7; spawnClashBurst(sp); }
+      TW.kb += 0.25;
+      _twBeep(300 + Math.random() * 520, 0.05, 'square', 0.12);
+      shakeTime = Math.max(shakeTime, 0.08); shakeIntensity = Math.max(shakeIntensity, 0.18);
+    }
+    if (TW.t >= TW_RUSH) {
+      TW.phase = 'release'; TW.t = 0;
+      { const _p = _projPct(player, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(210,160,255,0.95)', 16, 1.2); _spawnRipple(_p.x, _p.y, 'rgba(255,255,255,0.8)', 10, 0.9); }
+      _twBoom();
+    }
+  } else if (TW.phase === 'release') {
+    if (TW.t >= TW_RELEASE) {
+      if (enemy) {
+        const kb = 4.0 + Math.min(4, TW.kb);
+        applyKb('e', TW.dir.x, TW.dir.z, kb);
+        stunEnemy(1.1);
+      }
+      shakeTime = 0.5; shakeIntensity = 0.5;
+      endTheWorld();
+      setStatus('💥 時間再開！', true);
+      addDebugLog('⏱ ザ・ワールド解除→特大ノックバック');
+    }
+  }
+}
+
+// ========== ⏱ 敵側ザ・ワールド(敵サフール専用): プレイヤーの時間を止めて無駄無駄ラッシュ ==========
+let worldStoppedE = false;
+const TWE = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
+function startTheWorldE() {
+  if (TWE.active || TW.active) { return false; }
+  if (gameOver || !player || !enemy) { return false; }
+  if (tweCooldown > 0) { return false; }
+  if (enemyStamina < TW_COST) { addDebugLog('🤖💤 敵ザ・ワールド不発(スタミナ' + Math.floor(enemyStamina) + '/' + TW_COST + ')'); return false; }
+  enemyStamina -= TW_COST;
+  TWE.active = true; TWE.phase = 'charge'; TWE.t = 0; TWE.hitTimer = 0; TWE.hits = 0; TWE.kb = 0; TWE.rip = 0;
+  worldStoppedE = false;             // ★溜め中はプレイヤーは動ける=殴って止められる
+  TWE.dir.set(player.position.x - enemy.position.x, 0, player.position.z - enemy.position.z);
+  if (TWE.dir.lengthSq() < 1e-4) TWE.dir.set(0, 0, 1);
+  TWE.dir.normalize();
+  faceDir(enemy, TWE.dir.x, TWE.dir.z);
+  const _tcE = eActions['Tong_Charge'];
+  if (_tcE) { if (eCurrent && eCurrent !== _tcE) eCurrent.fadeOut(0.08); _tcE.reset().setLoop(THREE.LoopOnce).play(); _tcE.time = 0.2; _tcE.paused = true; _tcE.setEffectiveWeight(1); eCurrent = _tcE; }
+  const d = ensureTWDom();
+  d.wrap.style.background = 'transparent';
+  d.wrap.style.opacity = '1'; d.fx.innerHTML = '';
+  { const _p = _projPct(enemy, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(255,95,95,0.7)', 6, 0.7); }
+  setStatus('⚠ 敵がザ・ワールド発動中！殴って止めろ！', false);
+  addDebugLog('🤖⏱ 敵ザ・ワールド溜め開始(1秒)');
+  _twBeep(110, 0.15, 'square', 0.12);
+  return true;
+}
+function endTheWorldE() {
+  TWE.active = false; TWE.phase = ''; worldStoppedE = false;
+  tweCooldown = TW_COOLDOWN;
+  const d = ensureTWDom(); d.wrap.style.opacity = '0'; d.fx.innerHTML = '';
+  d.wrap.style.background = 'radial-gradient(circle at 50% 45%, rgba(90,0,140,0.12), rgba(30,0,55,0.62) 68%, rgba(8,0,18,0.9))';
+  if (eCurrent) eCurrent.paused = false;
+  aiDecideTimer = Math.max(aiDecideTimer || 0, 1.5); // 解除後は敵に隙(反撃チャンス)
+}
+function cancelTheWorldE(reason) {
+  TWE.active = false; TWE.phase = ''; worldStoppedE = false;
+  tweCooldown = TW_COOLDOWN;
+  const d = ensureTWDom(); d.wrap.style.opacity = '0'; d.fx.innerHTML = '';
+  d.wrap.style.background = 'radial-gradient(circle at 50% 45%, rgba(90,0,140,0.12), rgba(30,0,55,0.62) 68%, rgba(8,0,18,0.9))';
+  if (eCurrent) eCurrent.paused = false;
+  aiDecideTimer = Math.max(aiDecideTimer || 0, 1.0);
+  setStatus('⏱ 敵のザ・ワールドを止めた！反撃だ！', true);
+  addDebugLog('🤖⏱ 敵ザ・ワールド中断(' + reason + ')');
+  _twBeep(140, 0.3, 'sawtooth', 0.18);
+}
+function updateTheWorldE(dt) {
+  if (!TWE.active || !enemy) return;
+  const d = ensureTWDom();
+  TWE.t += dt;
+  if (TWE.phase === 'charge') {
+    // ★敵の溜め中: プレイヤーは自由。殴れば中断
+    if (_twCasterHit('enemy')) { cancelTheWorldE('殴られた'); return; }
+    const prog = Math.min(1, TWE.t / TW_CHARGE);
+    if (player) {
+      const dx = player.position.x - enemy.position.x, dz = player.position.z - enemy.position.z;
+      if (dx * dx + dz * dz > 1e-4) { faceDir(enemy, dx, dz); TWE.dir.set(dx, 0, dz).normalize(); }
+    }
+    TWE.rip -= dt;
+    if (TWE.rip <= 0) {
+      TWE.rip = 0.34 - prog * 0.22;
+      const _p = _projPct(enemy, 1.4);
+      _spawnRipple(_p.x, _p.y, 'rgba(255,95,95,' + (0.4 + prog * 0.45).toFixed(2) + ')', 4 + prog * 8, 0.65);
+      _twBeep(260 + prog * 380, 0.05, 'square', 0.10);
+    }
+    setStatus('⚠ 敵ザ・ワールドまで' + Math.ceil(TW_CHARGE - TWE.t) + '！殴って止めろ！', false);
+    if (TWE.t >= TW_CHARGE) {
+      TWE.phase = 'callout'; TWE.t = 0;
+      worldStoppedE = true;
+      playerVelX = 0; playerVelZ = 0; pKbX = 0; pKbZ = 0; eKbX = 0; eKbZ = 0;
+      guardHeld = false; joyStanceActive = false;
+      if (state === STATE.STANCE || state === STATE.PUSH_CHARGE || state === STATE.PUSHING) {
+        if (pCurrent) { pCurrent.paused = false; pCurrent.fadeOut(0.1); pCurrent = null; }
+        state = STATE.FREE;
+      }
+      d.wrap.style.background = 'radial-gradient(circle at 50% 45%, rgba(140,0,30,0.14), rgba(60,0,10,0.62) 68%, rgba(20,0,4,0.9))';
+      setStatus('⏱ 敵に時間を止められた！', false);
+      shakeTime = 0.3; shakeIntensity = 0.25;
+      _twBeep(140, 0.5, 'sawtooth', 0.25); _twBeep(70, 0.95, 'sine', 0.3, 0.05);
+      { const _p = _projPct(enemy, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(255,95,95,0.9)', 13, 1.1); }
+    }
+    return;
+  }
+  if (TWE.phase === 'callout') {
+    TWE.rip -= dt;
+    if (TWE.rip <= 0) { TWE.rip = 0.16; const _p = _projPct(enemy, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(255,95,95,0.85)', 12, 1.05); }
+    if (TWE.t >= TW_CALLOUT) {
+      TWE.phase = 'rush'; TWE.t = 0;
+      _twBeep(480, 0.06, 'square', 0.15);
+    }
+  } else if (TWE.phase === 'rush') {
+    if (player) {
+      const dx = player.position.x - enemy.position.x, dz = player.position.z - enemy.position.z;
+      const dist = Math.hypot(dx, dz), target = 1.7;
+      if (dist > target) {
+        const ux = dx / dist, uz = dz / dist, step = Math.min(dist - target, 15 * dt);
+        enemy.position.x += ux * step; enemy.position.z += uz * step;
+      }
+      faceDir(enemy, dx, dz);
+      const _twRE = Math.hypot(enemy.position.x, enemy.position.z);
+      const _twRME = STUMP_RADIUS - 0.6;
+      if (_twRE > _twRME) { enemy.position.x *= _twRME / _twRE; enemy.position.z *= _twRME / _twRE; }
+      // 敵の突進歩行アニメ
+      const _ewR = eActions['Armature|walk'];
+      if (_ewR && eCurrent === _ewR && !_ewR.isRunning()) { _ewR.reset().setLoop(THREE.LoopRepeat, Infinity).play(); }
+    }
+    TWE.hitTimer -= dt;
+    if (TWE.hitTimer <= 0) {
+      TWE.hitTimer = TW_HIT_INTERVAL;
+      TWE.hits++;
+      const clip = (TWE.hits % 2 === 0) ? 'Tong_Attack' : 'Tong_Charge';
+      const a = eActions[clip];
+      if (a) { a.reset().setLoop(THREE.LoopOnce).play(); a.setEffectiveTimeScale(2.6); a.paused = false; eCurrent = a; }
+      { const _pp = _projPct(player, 1.2); _spawnRipple(_pp.x + (Math.random() - 0.5) * 4, _pp.y + (Math.random() - 0.5) * 4, 'rgba(255,120,120,0.9)', 5.5, 0.55); }
+      if (player) { const sp = player.position.clone(); sp.y = 1.2 + Math.random() * 0.7; sp.x += (Math.random() - 0.5) * 0.7; sp.z += (Math.random() - 0.5) * 0.7; spawnClashBurst(sp); }
+      TWE.kb += 0.25;
+      _twBeep(260 + Math.random() * 480, 0.05, 'square', 0.12);
+      shakeTime = Math.max(shakeTime, 0.08); shakeIntensity = Math.max(shakeIntensity, 0.18);
+    }
+    if (TWE.t >= TW_RUSH) {
+      TWE.phase = 'release'; TWE.t = 0;
+      { const _p = _projPct(enemy, 1.4); _spawnRipple(_p.x, _p.y, 'rgba(255,120,120,0.95)', 16, 1.2); _spawnRipple(_p.x, _p.y, 'rgba(255,255,255,0.8)', 10, 0.9); }
+      _twBoom();
+    }
+  } else if (TWE.phase === 'release') {
+    if (TWE.t >= TW_RELEASE) {
+      if (player) {
+        const kb = 4.0 + Math.min(4, TWE.kb);
+        applyKb('p', TWE.dir.x, TWE.dir.z, kb);
+        stunPlayer(1.1);
+      }
+      shakeTime = 0.5; shakeIntensity = 0.5;
+      endTheWorldE();
+      setStatus('💥 反撃を喰らった！', false);
+      addDebugLog('🤖⏱ 敵ザ・ワールド解除→プレイヤー特大ノックバック');
+    }
+  }
+}
+
+// ===== 🌐 オンライン対戦モジュール =====
+function _netLog(m) { const el = document.getElementById('netStatus'); if (el) el.textContent = m; addDebugLog('🌐 ' + m); }
+function _mkCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+function _bindConn(c) {
+  net.conn = c;
+  c.on('open', () => { _netLog('接続成功！対戦開始 🎮'); try { c.send({ t: 'hello' }); } catch (e) {} startOnlineMatch(); });
+  c.on('data', (d) => { if (!d) return; if (d.t === 'i') net.remoteKeys = d; else if (d.t === 's') net.snap = d; });
+  c.on('close', () => { _netLog('相手が切断しました'); });
+  c.on('error', () => { _netLog('通信エラー'); });
+}
+function _startHost() {
+  if (typeof Peer === 'undefined') { _netLog('通信ライブラリ未読込(ネット接続が必要)'); return; }
+  const code = _mkCode();
+  net.role = 'host';
+  try { net.peer = new Peer('kbtl-' + code); } catch (e) { _netLog('作成失敗: ' + e); return; }
+  net.peer.on('open', () => _netLog('部屋コード【 ' + code + ' 】を相手に伝えてね（待機中…）'));
+  net.peer.on('connection', (c) => _bindConn(c));
+  net.peer.on('error', (err) => _netLog('エラー: ' + (err && err.type || err) + '（もう一度部屋を作り直してみて）'));
+}
+function _startJoin(code) {
+  if (typeof Peer === 'undefined') { _netLog('通信ライブラリ未読込(ネット接続が必要)'); return; }
+  if (!code) { _netLog('コードを入力してね'); return; }
+  net.role = 'client';
+  try { net.peer = new Peer(); } catch (e) { _netLog('接続失敗: ' + e); return; }
+  net.peer.on('open', () => { _netLog('接続中…'); const c = net.peer.connect('kbtl-' + code); _bindConn(c); });
+  net.peer.on('error', (err) => _netLog('エラー: ' + (err && err.type || err) + '（コードを確認してね）'));
+}
+function startOnlineMatch() {
+  if (online) return;
+  online = true;
+  const ov = document.getElementById('diffOverlay'); if (ov) ov.classList.add('hide');
+  _resetForOnline();
+}
+function _resetForOnline() {
+  if (!stagGltf) { setTimeout(_resetForOnline, 200); return; }
+  if (player) scene.remove(player);
+  if (enemy) scene.remove(enemy);
+  player = null; enemy = null; playerMixer = null; enemyMixer = null; pCurrent = null; eCurrent = null;
+  state = STATE.FREE; enemyState = ENEMY_STATE.FREE; gameOver = false; playerThrown = false; playerCarried = false;
+  pKbX = 0; pKbZ = 0; eKbX = 0; eKbZ = 0; playerVelX = 0; playerVelZ = 0;
+  worldStopped = false; worldStoppedE = false; TW.active = false; TWE.active = false;
+  aiPreset = null; playerBug = 'stag'; window._forceEnemyBug = 'stag';
+  initCharacters(stagGltf);
+  const ld = document.getElementById('loading'); if (ld) ld.style.display = 'none';
+  addDebugLog('🌐 オンライン対戦開始 role=' + net.role);
+}
+function _applyRemoteAnim(obj, actions, w) {
+  const wn = walkAnimName; if (!wn || !actions[wn]) return;
+  const a = actions[wn];
+  if (w) { if (!a.isRunning()) a.reset().setLoop(THREE.LoopRepeat).play(); a.setEffectiveTimeScale(1.4); }
+  else { if (a.isRunning()) a.fadeOut(0.15); }
+}
+function driveEnemyMoveOnline(dt) {
+  const k = net.remoteKeys || {};
+  const ef = _vecPool.eFwd.copy(localForward).applyQuaternion(enemy.quaternion);
+  let mv = false; const spd = 5;
+  if (k.u) { enemy.position.x += ef.x * spd * dt; enemy.position.z += ef.z * spd * dt; mv = true; }
+  if (k.d) { enemy.position.x -= ef.x * spd * dt; enemy.position.z -= ef.z * spd * dt; mv = true; }
+  if (k.l) enemy.rotation.y += 1.6 * dt;
+  if (k.r) enemy.rotation.y -= 1.6 * dt;
+  const r = Math.hypot(enemy.position.x, enemy.position.z);
+  if (r > STUMP_RADIUS - 1) { enemy.position.x *= (STUMP_RADIUS - 1) / r; enemy.position.z *= (STUMP_RADIUS - 1) / r; }
+  const ew = eActions[walkAnimName];
+  if (ew) { if (mv) { if (!ew.isRunning()) ew.reset().setLoop(THREE.LoopRepeat).play(); ew.setEffectiveTimeScale(1.4); } else if (ew.isRunning()) ew.fadeOut(0.15); }
+  net._eWalk = mv;
+}
+function _hostSendSnapshot(dt) {
+  if (!net.conn || !net.conn.open) return;
+  net.lastSend += dt;
+  if (net.lastSend < 1 / 30) return;
+  net.lastSend = 0;
+  try {
+    net.conn.send({ t: 's',
+      p: [player.position.x, player.position.y, player.position.z, player.quaternion.x, player.quaternion.y, player.quaternion.z, player.quaternion.w, _pMoving ? 1 : 0],
+      e: [enemy.position.x, enemy.position.y, enemy.position.z, enemy.quaternion.x, enemy.quaternion.y, enemy.quaternion.z, enemy.quaternion.w, net._eWalk ? 1 : 0] });
+  } catch (e) {}
+}
+function _clientSendInput() {
+  if (!net.conn || !net.conn.open) return;
+  try { net.conn.send({ t: 'i', u: !!(keys.KeyW || keys.ArrowUp), d: !!(keys.KeyS || keys.ArrowDown), l: !!(keys.KeyA || keys.ArrowLeft), r: !!(keys.KeyD || keys.ArrowRight) }); } catch (e) {}
+}
+function wireOnlineLobby() {
+  const tog = document.getElementById('onlineToggle'), box = document.getElementById('onlineBox');
+  if (tog && box) { const _t = (e) => { if (e) e.preventDefault(); box.style.display = (box.style.display === 'none') ? 'block' : 'none'; }; tog.addEventListener('click', _t); tog.addEventListener('touchstart', _t); }
+  const hb = document.getElementById('hostBtn');
+  if (hb) { const _h = (e) => { if (e) e.preventDefault(); _startHost(); }; hb.addEventListener('click', _h); hb.addEventListener('touchstart', _h); }
+  const jb = document.getElementById('joinBtn'), jc = document.getElementById('joinCode');
+  if (jb && jc) { const _j = (e) => { if (e) e.preventDefault(); _startJoin((jc.value || '').trim().toUpperCase()); }; jb.addEventListener('click', _j); jb.addEventListener('touchstart', _j); }
+}
+wireOnlineLobby();
+
 function animate() {
   requestAnimationFrame(animate);
   const _rawDt = clock.getDelta();
   // ★dtに上限。フレーム落ちやタブ復帰でdtが跳ねると「速度×dt」が暴走して瞬間移動するのを防ぐ(0.05s=20fps相当でクランプ)
   const dt = Math.min(_rawDt, 0.05);
+  const _clientView = (online && net.role === 'client');
   // ★カクつき計測: 長フレーム(>100ms)を記録+3秒ごとにFPS平均をログ(Bキーで確認)
   _perfFrames++; _perfAcc += _rawDt;
   if (_rawDt > _perfWorst) _perfWorst = _rawDt;
@@ -2084,6 +3060,12 @@ function animate() {
         addDebugLog('🤼 組み合い終了→両者吹き飛び');
       }
     }
+
+    // ⏱ ザ・ワールド進行(溜め〜時間停止まで。TW.active/TWE.activeで判定=溜め中も回す)
+    if (twCooldown > 0) twCooldown = Math.max(0, twCooldown - dt);
+    if (tweCooldown > 0) tweCooldown = Math.max(0, tweCooldown - dt);
+    if (TW.active && player) updateTheWorld(dt);
+    if (TWE.active && enemy) updateTheWorldE(dt);
 
     // ===== 敵の運搬攻撃: プレイヤーを咥えて縁へ運ぶ→投げ(連打で脱出) =====
     if (playerCarried && player && enemy && !gameOver) {
@@ -2161,13 +3143,31 @@ function animate() {
         if (eCurrent) { eCurrent.fadeOut(0.1); eCurrent = null; }
         const ta = eActions[attackAnimName];
         if (ta) { ta.reset().setLoop(THREE.LoopOnce).play(); ta.time = STANCE_HOLD_TIME; eCurrent = ta; }
-        aiDecideTimer = Math.max(aiDecideTimer, 0.8);
+        // ★敵の運搬投げ直後リカバリー: 反撃余地を作る(短すぎると起き上がってすぐ次の攻撃で理不尽)
+        aiDecideTimer = Math.max(aiDecideTimer, 1.35);
+        aiReactCounter = null; // 反応予約もクリア=すぐ反応で潰されない
         setStatus('🌀 投げられた！！', false);
-        addDebugLog('🤖🌀 運搬投げ！');
+        addDebugLog('🤖🌀 運搬投げ！(隙アリ)');
       }
     }
 
-  if (player && idleReady && !grappleActive && !playerCarried) {
+  // 🌐 クライアント: 自分では計算せず、ホストから届いた状態を反映して描画するだけ
+  if (_clientView && player && enemy) {
+    if (net.snap) {
+      const s = net.snap;
+      player.position.set(s.p[0], s.p[1], s.p[2]); player.quaternion.set(s.p[3], s.p[4], s.p[5], s.p[6]);
+      enemy.position.set(s.e[0], s.e[1], s.e[2]); enemy.quaternion.set(s.e[3], s.e[4], s.e[5], s.e[6]);
+      _applyRemoteAnim(player, pActions, s.p[7]);
+      _applyRemoteAnim(enemy, eActions, s.e[7]);
+    }
+    _clientSendInput();
+    const _bo = _vecPool.backOffset.copy(localForward).multiplyScalar(-13); _bo.y = 8.5; _bo.applyQuaternion(enemy.quaternion);
+    const _ct = enemy.position.clone().add(_bo); camera.position.lerp(_ct, 0.15);
+    const _la = _vecPool.lookAhead.copy(localForward).multiplyScalar(4).applyQuaternion(enemy.quaternion);
+    camera.lookAt(enemy.position.x + _la.x, enemy.position.y + 1.0, enemy.position.z + _la.z);
+  }
+
+  if (player && idleReady && !grappleActive && !playerCarried && !_clientView) {
     let moving = false;
     let moveFwd = false, moveBack = false, moveStrafe = false; // 脚アニメの向き判定用
     let locoSpeed = 0; // 実際の移動速度(脚アニメの速度連動用=足が滑らないように)
@@ -2175,19 +3175,23 @@ function animate() {
 
     // --- Space/Fの押した瞬間・離した瞬間を両方検出 ---
     const spaceDown = !!keys.Space;
-    const spacePressed = spaceDown && !spaceWasDown;
-    const spaceReleased = !spaceDown && spaceWasDown;
+    const spacePressed = (spaceDown && !spaceWasDown) || !!keyDownEdge.Space;
+    const spaceReleased = (!spaceDown && spaceWasDown) || !!keyUpEdge.Space;
+    keyDownEdge.Space = false; keyUpEdge.Space = false;
     spaceWasDown = spaceDown;
     const fDown = !!keys.KeyF;
-    const fPressed = fDown && !fWasDown;
-    const fReleased = !fDown && fWasDown;
+    const fPressed = (fDown && !fWasDown) || !!keyDownEdge.KeyF;
+    const fReleased = (!fDown && fWasDown) || !!keyUpEdge.KeyF;
+    keyDownEdge.KeyF = false; keyUpEdge.KeyF = false;
     fWasDown = fDown;
     const shiftDownNow = !!(keys.ShiftLeft || keys.ShiftRight);
-    const shiftPressed = shiftDownNow && !shiftWasDown; // 押した瞬間のみ(保持は含まない)
+    const shiftPressed = (shiftDownNow && !shiftWasDown) || !!keyDownEdge.ShiftLeft || !!keyDownEdge.ShiftRight; // 押した瞬間のみ(保持は含まない)
+    keyDownEdge.ShiftLeft = false; keyDownEdge.ShiftRight = false;
     shiftWasDown = shiftDownNow;
     const eDown = !!keys.KeyE;
-    const ePressed = eDown && !eWasDown;
-    const eReleased = !eDown && eWasDown;
+    const ePressed = (eDown && !eWasDown) || !!keyDownEdge.KeyE;
+    const eReleased = (!eDown && eWasDown) || !!keyUpEdge.KeyE;
+    keyDownEdge.KeyE = false; keyUpEdge.KeyE = false;
     eWasDown = eDown;
 
     // ===== スタン中(スタミナ切れ): 行動不能でよろける =====
@@ -2200,7 +3204,7 @@ function animate() {
     }
 
     // --- 移動・回転（BITING/PUSHING/STUN中は動けない） ---
-    if (state !== STATE.BITING && state !== STATE.PUSHING && state !== STATE.STUN && !gameOver && !playerThrown) {
+    if (state !== STATE.BITING && state !== STATE.PUSHING && state !== STATE.STUN && state !== STATE.THEWORLD && !gameOver && !playerThrown && !worldStoppedE) {
       // 構え中(STANCE)＋前進(W)＝突進！速度アップ
       // ガード判定：Shift押しっぱなしで速度半分
       guardHeld = !!(keys.ShiftLeft || keys.ShiftRight);
@@ -2272,8 +3276,26 @@ function animate() {
     const dz = enemy.position.z - player.position.z;
     const distToEnemy = Math.hypot(dx, dz);
 
+    // ⏱ サフール: どの入力経路(ジョイスティック/タッチ含む)でも掴み構えに入った瞬間ザ・ワールドへ変換
+    if (player.userData && player.userData.bug === 'tong' && state === STATE.STANCE && !TW.active && !worldStoppedE) {
+      addDebugLog('⏱ 掴み構え検知→ザ・ワールドへ変換');
+      if (pCurrent) pCurrent.paused = false;
+      joyStanceActive = false;
+      state = STATE.FREE;
+      stamina = Math.min(MAX_STAMINA, stamina + STAM_COST_GRAB); // 構えで消費した分を返却
+      startTheWorld();
+    }
+
+    // --- Space押下(サフール専用)：必殺「ザ・ワールド(時よ止まれ)」を発動 ---
+    if (!gameOver && !playerThrown && !worldStoppedE && spacePressed && state === STATE.FREE &&
+        player.userData && player.userData.bug === 'tong') {
+      addDebugLog('⏱ Space検知→ザ・ワールド発動要求');
+      startTheWorld();
+    }
+
     // --- Space押下：構え開始（顎を開いてSTANCE状態へ） ---
-    if (!gameOver && !playerThrown && spacePressed && state === STATE.FREE && attackAnimName) {
+    if (!gameOver && !playerThrown && !worldStoppedE && spacePressed && state === STATE.FREE && attackAnimName &&
+        !(player.userData && player.userData.bug === 'tong')) {
       // スタミナ最低値チェック
       const requiredStam = STAM_MIN_GRAB;
       if (stamina < requiredStam) {
@@ -2283,15 +3305,28 @@ function animate() {
       } else {
       state = STATE.STANCE;
       biteResolved = false;
-      attackMode = 'grab';
+      // ★カブトなら吹き飛ばし、クワガタなら通常掴み
+      attackMode = (player.userData && player.userData.bug === 'kabuto') ? 'blowaway' : 'grab';
       // スタミナ消費（構え開始時に）
-      stamina -= STAM_COST_GRAB;
-      addDebugLog(attackMode === 'blowaway' ? '💥 吹き飛ばし構え' : '🦾 掴み構え(顎を開く)');
-      const a = pActions[attackAnimName];
-      if (a) {
-        a.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
-        a.clampWhenFinished = true;
-        pCurrent = a;
+      stamina -= (attackMode === 'blowaway') ? STAM_COST_BLOWAWAY : STAM_COST_GRAB;
+      addDebugLog(attackMode === 'blowaway' ? '💥 吹き飛ばし構え' : (player.userData.bug === 'tong' ? '🪵 バット構え' : '🦾 掴み構え(顎を開く)'));
+      // ★Tongならチャージ大振り、それ以外はクワガタ攻撃モーション
+      if (player.userData.bug === 'tong') {
+        const _tCharge = pActions['Tong_Charge'];
+        if (_tCharge) {
+          if (pCurrent && pCurrent !== _tCharge) pCurrent.fadeOut(0.1);
+          _tCharge.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+          _tCharge.clampWhenFinished = true;
+          _tCharge.setEffectiveTimeScale(0.5); // 溜め中はゆっくり
+          pCurrent = _tCharge;
+        }
+      } else {
+        const a = pActions[attackAnimName];
+        if (a) {
+          a.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+          a.clampWhenFinished = true;
+          pCurrent = a;
+        }
       }
       setStatus(attackMode === 'blowaway' ? '💥 吹き飛ばし構え！' : '構え中！離すと噛む', true);
       } // else閉じ (スタミナOK分岐)
@@ -2316,7 +3351,7 @@ function animate() {
 
     // ========== プッシュ(三すくみ・長押しチャージ式) ==========
     // 発動: FREEでEキー押下→溜め開始(黄色く光る=相手にバレる)。離すと威力に応じて発射
-    if (!gameOver && !playerThrown && ePressed && state === STATE.FREE && stamina >= STAM_COST_PUSH) {
+    if (!gameOver && !playerThrown && !worldStoppedE && ePressed && state === STATE.FREE && stamina >= STAM_COST_PUSH) {
       state = STATE.PUSH_CHARGE;
       pushChargeTime = 0;
       stamina -= STAM_COST_PUSH;
@@ -2342,14 +3377,27 @@ function animate() {
         const _pw = Math.round(pushPower * 100);
         addDebugLog(`👊 プッシュ発射！威力${_pw}%`);
         setStatus(`👊 プッシュ 威力${_pw}%！`, true);
-        const pa = pActions[attackAnimName];
-        if (pa) { pa.paused = false; pa.setEffectiveTimeScale(2.5); }
+        // ★Tongならバット振りモーション、それ以外はクワガタ攻撃モーション
+        if (player.userData.bug === 'tong') {
+          const _tAtk = pActions['Tong_Attack'];
+          if (_tAtk) {
+            if (pCurrent && pCurrent !== _tAtk) pCurrent.fadeOut(0.1);
+            _tAtk.reset().setLoop(THREE.LoopOnce).fadeIn(0.05).play();
+            _tAtk.clampWhenFinished = true;
+            _tAtk.setEffectiveTimeScale(1.5);
+            pCurrent = _tAtk;
+          }
+        } else {
+          const pa = pActions[attackAnimName];
+          if (pa) { pa.paused = false; pa.setEffectiveTimeScale(2.5); }
+        }
       }
     }
     // プッシュ実行中(発射後)
     if (state === STATE.PUSHING) {
       pushTimer += dt;
-      const _lunge = PUSH_LUNGE_SPEED * (0.7 + pushPower * 0.6); // 威力で踏み込みも変化
+      const _lungeBug = (player.userData && player.userData.bug === 'kabuto') ? 1.6 : 1.0; // カブトはツノで深く突進
+      const _lunge = PUSH_LUNGE_SPEED * (0.7 + pushPower * 0.6) * _lungeBug; // 威力で踏み込みも変化
       // 前進(短い踏み込み)
       if (pushTimer < PUSH_ACTIVE_END) {
         const pf = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
@@ -2364,10 +3412,11 @@ function animate() {
         const pdx = enemy.position.x - player.position.x;
         const pdz = enemy.position.z - player.position.z;
         const pd = Math.hypot(pdx, pdz);
-        // 正面かつ射程内
+        // ★体表面距離で命中判定(体の大きさに左右されない=カブトでも確実に届く)。正面判定は少し緩める
         const pf2 = _vecPool.pf2.copy(localForward).applyQuaternion(player.quaternion);
         const facing = pd > 0.01 ? (pf2.x * pdx + pf2.z * pdz) / pd : 0;
-        if (pd <= PUSH_RANGE && facing > 0.5) {
+        const _pushHit = findClosestHit(pBones, _biteBonesFor(player), eBones, eColliders && eColliders.full);
+        if ((_pushHit.dist <= PUSH_CONNECT || pd <= PUSH_RANGE) && facing > 0.35) {
           pushResolved = true;
           const dirx = pd > 0.01 ? pdx / pd : pf2.x;
           const dirz = pd > 0.01 ? pdz / pd : pf2.z;
@@ -2447,8 +3496,9 @@ function animate() {
     }
     // ========== 攻撃ジョイスティック処理 ==========
     // 引き始め: FREE状態で15%以上引いたらSTANCE突入
-    if (!gameOver && !playerThrown && joyActive && joyPullRatio > 0.15 && joyDirection === 'down' && state === STATE.FREE && attackAnimName) {
-      const mode = 'grab';
+    if (!gameOver && !playerThrown && !worldStoppedE && joyActive && joyPullRatio > 0.15 && joyDirection === 'down' && state === STATE.FREE && attackAnimName) {
+      // ★カブトは'blowaway'(吹き飛ばし)を発動、クワガタは通常の'grab'
+      const mode = (player.userData && player.userData.bug === 'kabuto') ? 'blowaway' : 'grab';
       const requiredStam = (mode === 'blowaway') ? STAM_MIN_BLOWAWAY : STAM_MIN_GRAB;
       if (stamina >= requiredStam) {
         state = STATE.STANCE;
@@ -2473,7 +3523,8 @@ function animate() {
     if (joyStanceActive && state === STATE.STANCE && pCurrent) {
       pCurrent.paused = true;
       pCurrent.time = STANCE_HOLD_TIME * Math.min(1, joyPullRatio * 1.2);
-      attackMode = 'grab';
+      // ★カブトは吹き飛ばし、クワガタは通常掴み
+      attackMode = (player.userData && player.userData.bug === 'kabuto') ? 'blowaway' : 'grab';
       const pct = Math.round(joyPullRatio * 100);
       setStatus(attackMode === 'blowaway' ? `💥 吹き飛ばし構え ${pct}%` : `🦾 掴み構え ${pct}%`, true);
     }
@@ -2509,8 +3560,19 @@ function animate() {
       state = STATE.BITING;
       attackPower = 1.0; // キーボードは引き量がないので常に最大威力
       if (pCurrent) pCurrent.paused = false;
-      addDebugLog(attackMode === 'blowaway' ? '💥 スコップ！' : '🦷 パクッ！');
-      setStatus('噛みつき！', true);
+      // ★Tong: 大振り発動→振り下ろしを高速再生
+      if (player.userData.bug === 'tong') {
+        const _tCharge = pActions['Tong_Charge'];
+        if (_tCharge) {
+          _tCharge.setEffectiveTimeScale(2.5);
+          _tCharge.paused = false;
+        }
+        addDebugLog('🪵💥 バット大振り発動！');
+        setStatus('🪵 バット大振り！！', true);
+      } else {
+        addDebugLog(attackMode === 'blowaway' ? '💥 スコップ！' : '🦷 パクッ！');
+        setStatus('噛みつき！', true);
+      }
     }
 
     // --- ガードキャンセル：噛み判定後のBITING中にShiftでキャンセル可 ---
@@ -2550,7 +3612,7 @@ function animate() {
         addDebugLog(`🔬 enemy.pos=(${enemy.position.x.toFixed(1)},${enemy.position.z.toFixed(1)}) Thorax=(${_tp.x.toFixed(1)},${_tp.z.toFixed(1)}) Mand=(${_mp.x.toFixed(1)},${_mp.z.toFixed(1)})`);
         addDebugLog(`🔬 Mandible親: ${chain.join('→')} / cached==fresh=${cachedSameAsFresh}`);
       }
-      const hit = findClosestHit(pBones, BITE_BONES, eBones);
+      const hit = findClosestHit(pBones, _biteBonesFor(player), eBones, eColliders && eColliders.full);
       // ★ガード相手は掴みの届く距離を広げる(ガード中でも確実につかめる)
       const _grabRange = aiGuarding ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE;
       if (hit.dist <= _grabRange) {
@@ -2608,6 +3670,10 @@ function animate() {
             }
             addDebugLog('🦾 相手を持ち上げた！スティックを倒した方向に投げられる');
             setStatus('運搬中！スティックで狙って投げる', true);
+          } else if (attackMode === 'blowaway') {
+            // ★吹き飛ばし: 掴まずCARRYING経由せず、即その場で斜め後方に高く投げる
+            addDebugLog('💥 吹き飛ばし成功！斜め後方へ！');
+            setStatus('💥 吹き飛ばし！！', true);
           }
           let attackLabel = '';
           if (hit.part === 'Head' || hit.part === 'Mandible_L' || hit.part === 'Mandible_R') {
@@ -2682,7 +3748,7 @@ function animate() {
       const shouldThrow = forcedDrop ||
         (attackMode === 'blowaway' && gripTimer >= gripAttackDur) ||
         (attackMode === 'grab' && (spacePressed || joyThrowRequest) && state === STATE.CARRYING);
-      joyThrowRequest = false; // 消費
+joyThrowRequest = false; // 消費
       if (shouldThrow) {
         // CARRYINGなら BITING に戻して、投げアニメ再生を続ける
         if (state === STATE.CARRYING) {
@@ -2764,6 +3830,31 @@ function animate() {
         throwStartPos = null;
         throwTargetPos = null;
       }
+      // ★飛行完了(t>=1): 着地→敵をFREEに戻して復帰(バグでREACTING固定になる問題の修正)
+      if (t >= 1 && throwStartPos && throwTargetPos && !gameOver) {
+        enemy.position.y = 0;
+        enemy.rotation.z = 0;
+        enemy.rotation.x = 0;
+        enemyState = ENEMY_STATE.FREE;
+        throwStartPos = null;
+        throwTargetPos = null;
+        // 敵の状態初期化: スタン付与で1秒無防備(反撃チャンス演出)
+        stunEnemy(1.0);
+        // レストポーズ復元
+        if (eCurrent) { eCurrent.fadeOut(0.15); eCurrent = null; }
+        if (typeof enemyRestPoses !== 'undefined' && enemyRestPoses && enemy) {
+          enemy.traverse(o => {
+            if (o.isBone) {
+              const rest = enemyRestPoses[o.name];
+              if (rest) {
+                o.position.set(rest.px, rest.py, rest.pz);
+                o.quaternion.set(rest.qx, rest.qy, rest.qz, rest.qw);
+              }
+            }
+          });
+        }
+        addDebugLog('🎯 敵着地→FREE復帰');
+      }
     }
 
     // ========== 敵AI ==========
@@ -2780,7 +3871,7 @@ function animate() {
       } else { _eKbLegsOff = false; }
       _ePrevPos.copy(enemy.position);
       // ★アイドル時の微妙な揺れ(生きてる感=常時ガン見を和らげる)。rotation.y(向き)は触らない
-      if (enemyState === ENEMY_STATE.FREE && !aiStunned && !aiAttacking && !aiPushing && enemyLocoSpeed < 0.6) {
+      if (enemyState === ENEMY_STATE.FREE && !aiStunned && !aiAttacking && !aiPushing && !worldStopped && !TWE.active && enemyLocoSpeed < 0.6) {
         const _sw = performance.now() * 0.0016 + 2.1;
         enemy.rotation.z = Math.sin(_sw) * 0.03;
         enemy.rotation.x = Math.sin(_sw * 0.63) * 0.02;
@@ -2788,7 +3879,9 @@ function animate() {
         enemy.rotation.z *= 0.86;
         enemy.rotation.x *= 0.86;
       }
-      if (aiStunned) {
+      if (worldStopped) {
+        // ⏱ 時間停止中: 敵のスタン回復・スタミナ増減も凍結(完全静止)
+      } else if (aiStunned) {
         aiStunTimer -= dt;
         enemyStamina = Math.min(MAX_STAMINA, enemyStamina + STAM_REGEN_STUN * dt);
         enemy.rotation.y += Math.sin(performance.now() * 0.018) * 0.04; // よろけ演出
@@ -2806,7 +3899,7 @@ function animate() {
       }
     }
 
-    if (aiPreset && !gameOver && !aiStunned && !grappleActive && !playerCarried && Math.hypot(eKbX, eKbZ) < 2.5 && enemyState === ENEMY_STATE.FREE && enemy && eBones) { // ★吹っ飛ばされ中はAI停止(押し合い震え防止)
+    if (aiPreset && !gameOver && !aiStunned && !grappleActive && !playerCarried && !worldStopped && !TWE.active && Math.hypot(eKbX, eKbZ) < 2.5 && enemyState === ENEMY_STATE.FREE && enemy && eBones) { // ★吹っ飛ばされ中/時間停止中はAI停止
       const aDx = player.position.x - enemy.position.x;
       const aDz = player.position.z - enemy.position.z;
       const aDist = Math.hypot(aDx, aDz);
@@ -2825,7 +3918,14 @@ function animate() {
         if (curPS === 'grab') cm = 'push';       // プッシュ〉掴み
         else if (curPS === 'guard') cm = 'grab'; // 掴み〉ガード
         else if (curPS === 'push') cm = 'guard'; // ガード〉プッシュ
-        if (cm) aiReactCounter = { move: cm, timer: aiPreset.reactDelay };
+        if (cm) {
+          // ★フェアネス: ガード反応だけは人間に見える速さ(最低0.22s)まで遅らせる
+          //   =プッシュを構えた瞬間の神速ガードで「なんか弾かれる」理不尽を解消。素早く放てば勝てる読み合いに
+          // ★反応時間にも揺らぎ: ±20%(神反応の一貫性を破る=読みにくく)
+          const _rdBase = (cm === 'guard') ? Math.max(aiPreset.reactDelay, 0.22) : aiPreset.reactDelay;
+          const _rd = _rdBase * (0.85 + Math.random() * 0.3);
+          aiReactCounter = { move: cm, timer: _rd };
+        }
       }
       aiPrevPlayerState = curPS;
 
@@ -2835,7 +3935,7 @@ function animate() {
           aiReactCounter.timer -= dt;
           if (aiReactCounter.timer <= 0) {
             const mv = aiReactCounter.move; aiReactCounter = null;
-            if (mv === 'push') { aiPushing = true; aiPushTimer = 0; aiPushResolved = false; enemyStamina -= 18; aiPushPower = Math.min(1, 0.3 + Math.random() * 0.3 + aiPreset.patience * 0.4); if (eCurrent) eCurrent.fadeOut(0.1); addDebugLog(`🤖👊 反応プッシュ(威力${Math.round(aiPushPower*100)})`); }
+            if (mv === 'push') { aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick(); enemyStamina -= 18; aiPushPower = Math.min(1, 0.3 + Math.random() * 0.3 + aiPreset.patience * 0.4); if (eCurrent) eCurrent.fadeOut(0.1); addDebugLog(`🤖👊 反応プッシュ(威力${Math.round(aiPushPower*100)})`); }
             else if (mv === 'grab') { startEnemyAttack(); addDebugLog('🤖🦷 反応掴み'); }
             else if (mv === 'guard') { aiGuarding = true; aiGuardTimer = 0; if (eCurrent) eCurrent.fadeOut(0.1); const ew0 = eActions[walkAnimName]; if (ew0 && ew0.isRunning()) ew0.fadeOut(0.1); addDebugLog('🤖🛡️ 反応ガード'); }
           }
@@ -2870,8 +3970,37 @@ function animate() {
 
         // --- 行動決定(間合い管理+癖読み。committした技への即カウンターは上の反応層が担当) ---
         aiDecideTimer -= dt;
+        // ★最優先割り込み: プレイヤーがザ・ワールドを溜め中なら、通常判断を捨てて全力で潰しに行く
+        const _pCharging = (TW.active && TW.phase === 'charge');
+        if (_pCharging && !aiAttacking && !aiPushing && !aiGuarding) {
+          if (aDist <= PUSH_RANGE + 0.3 && Math.abs(aiFaceErr) < 0.85) {
+            // 射程内 → 即プッシュ(kbで確実に中断)。スタミナ無ければ掴み
+            if (enemyStamina >= 8) {
+              aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
+              enemyStamina -= 12; aiPushPower = Math.min(1, 0.75 + Math.random() * 0.25);
+              if (eCurrent) eCurrent.fadeOut(0.08);
+              addDebugLog('🤖⚡ ザ・ワールド阻止プッシュ！');
+            } else { startEnemyAttack(); addDebugLog('🤖⚡ ザ・ワールド阻止(掴み)'); }
+          } else {
+            // 射程外 → 全力突進で肉薄(溜め中に接近して潰す)
+            const eFc = _vecPool.eFwd2.copy(localForward).applyQuaternion(enemy.quaternion);
+            const spd = Math.max(aiPreset.chargeSpeed, aiPreset.moveSpeed) * 1.25;
+            const nxC = enemy.position.x + eFc.x * spd * dt, nzC = enemy.position.z + eFc.z * spd * dt;
+            if (Math.hypot(nxC, nzC) < STUMP_RADIUS - 0.6) { enemy.position.x = nxC; enemy.position.z = nzC; }
+            const ewR = eActions[walkAnimName];
+            if (ewR) { if (!ewR.isRunning()) ewR.reset().setLoop(THREE.LoopRepeat).play(); ewR.setEffectiveTimeScale(6.0); }
+          }
+        }
+        if (!_pCharging) {
+        // ★フェイント: 決定周期に関係なく低確率で横に動く(規則性を崩す)
+        if (aiDecideTimer > 0.1 && !aiAttacking && !aiGuarding && !aiPushing && Math.random() < 0.015) {
+          aiBehavior = (Math.random() < 0.5) ? 'spaceL' : 'spaceR';
+          aiDecideTimer = 0.3 + Math.random() * 0.4;
+          addDebugLog('🤖🎭 フェイント(横回避)');
+        }
         if (aiDecideTimer <= 0) {
-          aiDecideTimer = aiPreset.decideEvery;
+          // ★決定周期に±25%のランダム性を加えて規則性を崩す(予測されにくく)
+          aiDecideTimer = aiPreset.decideEvery * (0.75 + Math.random() * 0.5);
           const roll = Math.random();
           const inRange = aDist <= aiPreset.attackRange && Math.abs(aiFaceErr) < 0.5;
           // プレイヤーの直近の傾向を読む
@@ -2885,6 +4014,12 @@ function animate() {
             // ★プレイヤーがスタン中 → 確実に攻める(大チャンス)
             startEnemyAttack();
             addDebugLog('🤖💥 スタン狙い撃ち');
+          } else if (!playerThrown && bodyCenterDist(pBones, player) > STUMP_RADIUS - 3.2 && aDist <= aiPreset.attackRange + 0.5 && enemyStamina >= 12 && Math.abs(aiFaceErr) < 0.7) {
+            // ★プレイヤーが崖際 → プッシュで場外へ押し出して仕留める
+            aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
+            enemyStamina -= 14; aiPushPower = Math.min(1, 0.7 + Math.random() * 0.3);
+            if (eCurrent) eCurrent.fadeOut(0.1);
+            addDebugLog('🤖🔪 崖際→場外プッシュ');
           } else if (enemyStamina < 28 && aDist < aiPreset.attackRange + 0.4 && Math.random() < 0.7) {
             // ★自分のスタミナ低下 → 間合いを取って回復(自滅スタン回避=賢く粘る)
             aiBehavior = (Math.random() < 0.5) ? 'spaceL' : 'spaceR';
@@ -2900,11 +4035,25 @@ function animate() {
             // ★ガード多め読み → 掴みで崩す (掴み〉ガード)
             startEnemyAttack();
             addDebugLog('🤖🧠 ガード多め読み→掴み');
+          } else if (!playerThrown && pushN >= 2 && pushN > guardN && pushN > grabN && Math.random() < aiPreset.readChance) {
+            // ★プッシュ多め読み → 距離を取ってガード(プッシュ〉掴みだが、単純ガードで隙をつく)
+            //   もしくは自分もプッシュ(拮抗→両者スタン狙い)。半々で選ぶ
+            if (aDist > aiPreset.attackRange * 0.7 && Math.random() < 0.6) {
+              aiGuarding = true; aiGuardTimer = 0;
+              if (eCurrent) eCurrent.fadeOut(0.1);
+              addDebugLog('🤖🛡️ プッシュ多め読み→ガードで隙作り');
+            } else {
+              aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
+              enemyStamina -= 18;
+              aiPushPower = Math.min(1, 0.55 + Math.random() * 0.35);
+              if (eCurrent) eCurrent.fadeOut(0.1);
+              addDebugLog('🤖👊 プッシュ多め読み→対抗プッシュ');
+            }
           } else if (grabN >= 2 && grabN > guardN && aggressive) {
             // ★掴み多め読み → 間合いを取って突っ込まない(掴みに刺さらないよう距離を保つ)
             // 高精度AIは先読みプッシュで潰す(プッシュ〉掴み)、そうでなければ間合いを取る
             if (inRange && Math.random() < aiPreset.readChance * 0.9) {
-              aiPushing = true; aiPushTimer = 0; aiPushResolved = false;
+              aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
               enemyStamina -= 18;
               aiPushPower = Math.min(1, 0.45 + Math.random() * 0.3 + aiPreset.patience * 0.35);
               if (eCurrent) eCurrent.fadeOut(0.1);
@@ -2921,7 +4070,7 @@ function animate() {
             // ★学習カウンター: 長期の癖(一番多い技)を先回りして潰す(遊ぶほど発動率UP)
             const _lg = aiLearn.grab, _lp = aiLearn.push, _ld = aiLearn.guard;
             if (_lg >= _lp && _lg >= _ld) {
-              aiPushing = true; aiPushTimer = 0; aiPushResolved = false; enemyStamina -= 18;
+              aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick(); enemyStamina -= 18;
               aiPushPower = Math.min(1, 0.45 + Math.random() * 0.3 + aiPreset.patience * 0.35);
               if (eCurrent) eCurrent.fadeOut(0.1);
               addDebugLog('🧠 学習: 掴み癖→先回りプッシュ');
@@ -2936,7 +4085,7 @@ function animate() {
             }
           } else if (!playerThrown && inRange && !guardHeld && Math.random() < (aiPreset._pushBias || 0.45)) {
             // ★プッシュを積極的に使う(ガードされてなければ突き飛ばし/場外狙い)
-            aiPushing = true; aiPushTimer = 0; aiPushResolved = false;
+            aiPushing = true; aiPushTimer = 0; aiPushResolved = false; _eTongKick();
             enemyStamina -= 18;
             aiPushPower = Math.min(1, 0.4 + Math.random() * 0.35 + aiPreset.patience * 0.35);
             if (eCurrent) eCurrent.fadeOut(0.1);
@@ -2995,6 +4144,7 @@ function animate() {
             eWalk.fadeOut(0.15);
           }
         }
+        } // _pCharging(ザ・ワールド阻止)以外の通常行動 閉じ
         } // 反応カウンター発動フレームのスキップ閉じ
       } else if (aiAttacking) {
         // --- 敵の攻撃モーション進行中 ---
@@ -3040,7 +4190,7 @@ function animate() {
             aiBiteResolved = true;
             player.updateMatrixWorld(true);
             enemy.updateMatrixWorld(true);
-            const eHit = findClosestHit(eBones, BITE_BONES, pBones);
+            const eHit = findClosestHit(eBones, _biteBonesFor(enemy), pBones, pColliders && pColliders.full);
             if (eHit.dist <= (guardHeld ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE) && !playerThrown && state !== STATE.CARRYING && enemyState === ENEMY_STATE.FREE) {
               {
                 if (state === STATE.STANCE || state === STATE.BITING) {
@@ -3129,7 +4279,8 @@ function animate() {
           const pd = Math.hypot(pdx, pdz);
           const ef = _vecPool.ef.copy(localForward).applyQuaternion(enemy.quaternion);
           const facing = pd > 0.01 ? (ef.x * pdx + ef.z * pdz) / pd : 0;
-          if (pd <= PUSH_RANGE && facing > 0.5) {
+          const _ePushHit = findClosestHit(eBones, _biteBonesFor(enemy), pBones, pColliders && pColliders.full);
+          if ((_ePushHit.dist <= PUSH_CONNECT || pd <= PUSH_RANGE) && facing > 0.35) {
             aiPushResolved = true;
             const dx = pd > 0.01 ? pdx / pd : ef.x;
             const dz = pd > 0.01 ? pdz / pd : ef.z;
@@ -3205,10 +4356,10 @@ function animate() {
 
     // ===== 吹っ飛び(ノックバック)速度の適用: 瞬間移動せず滑って飛ばされる =====
     if (player && enemy && !gameOver && !grappleActive) {
-      if ((pKbX !== 0 || pKbZ !== 0) && !playerThrown && !playerCarried && state !== STATE.CARRYING) {
+      if ((pKbX !== 0 || pKbZ !== 0) && !playerThrown && !playerCarried && state !== STATE.CARRYING && !worldStoppedE) {
         player.position.x += pKbX * dt; player.position.z += pKbZ * dt;
       }
-      if ((eKbX !== 0 || eKbZ !== 0) && enemyState === ENEMY_STATE.FREE) {
+      if ((eKbX !== 0 || eKbZ !== 0) && enemyState === ENEMY_STATE.FREE && !worldStopped && !TWE.active) {
         enemy.position.x += eKbX * dt; enemy.position.z += eKbZ * dt;
       }
       const _dk = Math.exp(-KB_DECAY * dt);
@@ -3224,12 +4375,12 @@ function animate() {
     //   落ちないケースがあった。ここで全状態を漏れなく拾う。
     if (!gameOver && !grappleActive && player && enemy) {
       // プレイヤー: 投げられ飛行中(playerThrown)は専用処理に任せる。それ以外は全状態チェック
-      if (!playerThrown && !playerCarried) {
+      if (!playerThrown && !playerCarried && !TW.active) {
         const _pd = bodyCenterDist(pBones, player);
         if (_pd > STUMP_RADIUS) triggerFall(player, true);
       }
       // 敵: FREE時のみ(REACTINGの投げ飛行・GRIPPEDの運搬中は専用処理に任せる)
-      if (!gameOver && enemyState === ENEMY_STATE.FREE) {
+      if (!gameOver && enemyState === ENEMY_STATE.FREE && !TWE.active) {
         const _ed = bodyCenterDist(eBones, enemy);
         if (_ed > STUMP_RADIUS) triggerFall(enemy, false);
       }
@@ -3295,7 +4446,7 @@ function animate() {
       }
     }
     // ★アイドル時の微妙な揺れ(生きてる感=固まって見えない/常時ガン見を和らげる)
-    if (!gameOver && !playerThrown) {
+    if (!gameOver && !playerThrown && !worldStoppedE) {
       if (state === STATE.FREE && !moving) {
         const _sw = performance.now() * 0.0016;
         player.rotation.z = Math.sin(_sw) * 0.03;
@@ -3306,6 +4457,7 @@ function animate() {
       }
     }
 
+    _pMoving = moving;
     // ================= カメラ：クワガタの後ろ斜め上 =================
     // プレイヤーの背後（大顎と逆側）・高い位置から見下ろす三人称視点（斜め上）
     const backOffset = _vecPool.backOffset.copy(localForward).multiplyScalar(-13);
@@ -3334,8 +4486,70 @@ function animate() {
   if (hitStopTime > 0) {
     hitStopTime -= dt;
   } else {
-    if (playerMixer) playerMixer.update(dt);
-    if (enemyMixer)  enemyMixer.update(dt);
+    if (playerMixer && !worldStoppedE) playerMixer.update(dt); // ⏱ 敵の時間停止中はプレイヤーも凍結
+    // ★Tongモーション自動制御: walkアニメを常に再生し、キー入力でスピード切替
+    if (player && player.userData.bug === 'tong' && state === STATE.FREE && !playerThrown && !worldStoppedE) {
+      const _tWalk = pActions['Armature|walk'] || pActions['Tong_Walk'];
+      const _keyMoving = (keys.KeyW || keys.KeyS || keys.KeyA || keys.KeyD ||
+                         keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight);
+      if (_tWalk) {
+        // ★毎フレーム: 停止してたら再開&Loop設定
+        if (!_tWalk.isRunning()) {
+          _tWalk.reset();
+          _tWalk.setLoop(THREE.LoopRepeat, Infinity);
+          _tWalk.setEffectiveWeight(1.0);
+          _tWalk.play();
+        }
+        pCurrent = _tWalk;
+        // 移動中: 普通速度 / 止まってる時: 少し遅く(足踏み感)
+        _tWalk.setEffectiveTimeScale(_keyMoving ? 1.5 : 0.4);
+      }
+    }
+    // ★バット向き固定: グリップ(手)を起点に、先端を常に斜め下(地面方向)へ
+    //   腕が歩行で揺れてもバット先端はブレない=本物のように構える
+    if (player && player.userData.bug === 'tong' && window._tongBat && window._tongBat.parent) {
+      const _bt = window._tongBat;
+      if (!_bt.userData._q1) {
+        _bt.userData._q1 = new THREE.Quaternion();
+        _bt.userData._q2 = new THREE.Quaternion();
+        _bt.userData._v1 = new THREE.Vector3();
+        _bt.userData._up = new THREE.Vector3(0, 1, 0);
+      }
+      const _hq = _bt.userData._q1, _wq = _bt.userData._q2, _dv = _bt.userData._v1;
+      _bt.parent.getWorldQuaternion(_hq);
+      // プレイヤーの向き基準で「体の外側(右脇)・斜め下」方向に構える
+      // 先端を敵方向(前・少し下・少し右外)へ = バット構え
+      // 先端を敵方向(前・少し下・少し右外) - Z反転
+      _dv.set(-0.2, -0.35, 0.85).normalize().applyQuaternion(player.quaternion);
+      _wq.setFromUnitVectors(_bt.userData._up, _dv);
+      _bt.quaternion.copy(_hq.invert()).multiply(_wq);
+    }
+    // ★敵サフールのバットも同様に先端を斜め下へ固定
+    if (enemy && enemy.userData.bug === 'tong' && window._tongBatE && window._tongBatE.parent) {
+      const _btE = window._tongBatE;
+      if (!_btE.userData._q1) {
+        _btE.userData._q1 = new THREE.Quaternion();
+        _btE.userData._q2 = new THREE.Quaternion();
+        _btE.userData._v1 = new THREE.Vector3();
+        _btE.userData._up = new THREE.Vector3(0, 1, 0);
+      }
+      const _hqE = _btE.userData._q1, _wqE = _btE.userData._q2, _dvE = _btE.userData._v1;
+      _btE.parent.getWorldQuaternion(_hqE);
+      _dvE.set(-0.2, -0.35, 0.85).normalize().applyQuaternion(enemy.quaternion);
+      _wqE.setFromUnitVectors(_btE.userData._up, _dvE);
+      _btE.quaternion.copy(_hqE.invert()).multiply(_wqE);
+    }
+    // ★敵サフール: アイドル/移動時は歩行アニメを常時回す(棒立ちT-pose防止)
+    if (enemy && enemy.userData.bug === 'tong' && enemyState === ENEMY_STATE.FREE &&
+        !TWE.active && !aiPushing && !aiAttacking && !worldStopped) {
+      const _eWalkT = eActions['Armature|walk'];
+      if (_eWalkT && (!eCurrent || eCurrent === _eWalkT)) {
+        if (!_eWalkT.isRunning()) { _eWalkT.reset(); _eWalkT.setLoop(THREE.LoopRepeat, Infinity); _eWalkT.setEffectiveWeight(1.0); _eWalkT.play(); }
+        _eWalkT.setEffectiveTimeScale(Math.max(0.4, Math.min(2.5, enemyLocoSpeed * 0.5)));
+        eCurrent = _eWalkT;
+      }
+    }
+    if (enemyMixer && !worldStopped)  enemyMixer.update(dt); // ★時間停止中は敵アニメも凍結
   }
   updateClashEffects(dt); // 衝突エフェクトはヒットストップ中も動かす
   // ★CARRYING中：攻撃アニメの「突進でRootが前方+5.5に伸びた状態」を打ち消す。
@@ -3356,7 +4570,7 @@ function animate() {
   }
 
   // ========== スタミナ更新 ==========
-  {
+  if (!worldStoppedE) {
     let drain = 0;
     if (state === STATE.STANCE && (keys.KeyW || keys.ArrowUp)) drain += STAM_DRAIN_CHARGE;
     else if (state === STATE.STANCE) drain += STAM_DRAIN_STANCE;
@@ -3429,9 +4643,20 @@ function animate() {
     }
   }
 
+  for (const _kb of [_kabutoBonesP, _kabutoBonesE]) {
+    if (!_kb) continue;
+    const _mL = _kb['Mandible_L'], _mR = _kb['Mandible_R'];
+    if (_mL) _mL.scale.setScalar(0.02);
+    if (_mR) _mR.scale.setScalar(0.02);
+  }
   flushDebugLog();
   // コライダー可視化を毎フレーム更新（ボーンに追従）
   updateColliderMeshes();
+  // 🌐 ホスト: 敵(P2)を相手の入力で動かし、状態を相手に送信
+  if (online && net.role === 'host' && player && enemy && !gameOver) {
+    driveEnemyMoveOnline(dt);
+    _hostSendSnapshot(dt);
+  }
   renderer.render(scene, camera);
 }
 animate();
