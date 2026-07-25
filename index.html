@@ -3180,6 +3180,8 @@ function animate() {
     let locoSpeed = 0; // 実際の移動速度(脚アニメの速度連動用=足が滑らないように)
     if (state === STATE.BITING || state === STATE.PUSHING) { playerVelX = 0; playerVelZ = 0; }
 
+    // 🌐 オンライン(移動同期フェーズ): 戦闘操作(掴みSpace/プッシュE/F)を無効化し、同期中の相手との取り合い(ガタつき)を防ぐ
+    if (online) { keys.Space = false; keys.KeyE = false; keys.KeyF = false; keyDownEdge.Space = keyUpEdge.Space = keyDownEdge.KeyE = keyUpEdge.KeyE = keyDownEdge.KeyF = keyUpEdge.KeyF = false; }
     // --- Space/Fの押した瞬間・離した瞬間を両方検出 ---
     const spaceDown = !!keys.Space;
     const spacePressed = (spaceDown && !spaceWasDown) || !!keyDownEdge.Space;
