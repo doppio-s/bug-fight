@@ -447,6 +447,7 @@
   <div id="adPrivacy" style="margin-top:8px;font-size:10px;color:#8a8474;">広告配信のためにCookie(クッキー)を使用することがあります</div>
 </div>
 
+<div id="netDbg" style="position:fixed;left:8px;bottom:8px;z-index:260;font:12px monospace;color:#9f9;background:rgba(0,0,0,0.55);padding:3px 7px;border-radius:6px;display:none;"></div>
 <button id="homeBtn" title="タイトルに戻る" style="position:fixed;top:10px;right:12px;z-index:250;padding:8px 14px;font-family:inherit;font-size:14px;background:rgba(25,28,40,0.82);border:2px solid #6a7a99;border-radius:10px;color:#dde6ff;cursor:pointer;">🏠 タイトル</button>
 <div id="loading">
   <div>🪲 読み込み中...</div>
@@ -2558,7 +2559,8 @@ let twCooldown = 0, tweCooldown = 0;  // ザ・ワールドの再使用インタ
 // ===== 🌐 オンライン対戦(P2P・ホスト権威) =====
 let online = false;
 let _pMoving = false;
-const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false };
+const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0 };
+window.__net = net; // 診断用
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
 const TW_CHARGE  = 1.0;               // ★発動までの溜め(1秒)。この間に殴られると中断=対処可能
@@ -2919,9 +2921,10 @@ function _netLog(m) { const el = document.getElementById('netStatus'); if (el) e
 function _mkCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
 function _bindConn(c) {
   net.conn = c;
-  c.on('open', () => { _netLog('接続成功！対戦開始 🎮'); try { c.send({ t: 'hello' }); } catch (e) {} startOnlineMatch(); });
-  c.on('data', (d) => { if (!d) return; if (d.t === 's') net.remoteState = d; else if (d.t === 'i') net.remoteKeys = d; });
-  c.on('close', () => { _netLog('相手が切断しました'); });
+  net.ready = false;
+  c.on('open', () => { net.ready = true; _netLog('接続成功！対戦開始 🎮'); try { c.send({ t: 'hello' }); } catch (e) {} startOnlineMatch(); });
+  c.on('data', (d) => { if (!d) return; if (d.t === 's') { net.remoteState = d; net._recv++; } else if (d.t === 'i') net.remoteKeys = d; });
+  c.on('close', () => { net.ready = false; _netLog('相手が切断しました'); });
   c.on('error', () => { _netLog('通信エラー'); });
 }
 function _startHost() {
@@ -2938,7 +2941,7 @@ function _startJoin(code) {
   if (!code) { _netLog('コードを入力してね'); return; }
   net.role = 'client';
   try { net.peer = new Peer(); } catch (e) { _netLog('接続失敗: ' + e); return; }
-  net.peer.on('open', () => { _netLog('接続中…'); const c = net.peer.connect('kbtl-' + code); _bindConn(c); });
+  net.peer.on('open', () => { _netLog('接続中…'); const c = net.peer.connect('kbtl-' + code, { reliable: true, serialization: 'json' }); _bindConn(c); });
   net.peer.on('error', (err) => _netLog('エラー: ' + (err && err.type || err) + '（コードを確認してね）'));
 }
 function startOnlineMatch() {
@@ -4657,16 +4660,21 @@ joyThrowRequest = false; // 消費
   // コライダー可視化を毎フレーム更新（ボーンに追従）
   updateColliderMeshes();
   // 🌐 オンライン(対称型): 自分のキャラを送信し、相手のキャラを受信して敵に補間反映
-  if (online && net.conn && net.conn.open && player && enemy) {
-    net.lastSend += dt;
-    if (net.lastSend >= 1 / 40) {
-      net.lastSend = 0;
-      try {
-        net.conn.send({ t: 's', x: player.position.x, y: player.position.y, z: player.position.z,
-          qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w,
-          w: (Math.hypot(playerVelX, playerVelZ) > 0.4) ? 1 : 0 });
-      } catch (e) {}
+  if (online && player && enemy) {
+    // 送信(接続オープン時のみ)
+    if (net.conn && (net.ready || net.conn.open)) {
+      net.lastSend += dt;
+      if (net.lastSend >= 1 / 40) {
+        net.lastSend = 0;
+        try {
+          net.conn.send({ t: 's', x: player.position.x, y: player.position.y, z: player.position.z,
+            qx: player.quaternion.x, qy: player.quaternion.y, qz: player.quaternion.z, qw: player.quaternion.w,
+            w: (Math.hypot(playerVelX, playerVelZ) > 0.4) ? 1 : 0 });
+          net._send++;
+        } catch (e) {}
+      }
     }
+    // 受信反映(オープン状態に関係なく、届いていれば必ず反映)
     if (net.remoteState) {
       const s = net.remoteState, a = Math.min(1, dt * 16);
       enemy.position.x += (s.x - enemy.position.x) * a;
@@ -4675,9 +4683,16 @@ joyThrowRequest = false; // 消費
       _qTmp.set(s.qx, s.qy, s.qz, s.qw); enemy.quaternion.slerp(_qTmp, a);
       _applyRemoteAnim(enemy, eActions, s.w);
     }
-    // 移動フェーズでは場外落下を防ぐため自分を土俵内にクランプ
+    // 場外落下防止(移動フェーズ)
     const pr = Math.hypot(player.position.x, player.position.z);
     if (pr > STUMP_RADIUS - 0.8) { const _k = (STUMP_RADIUS - 0.8) / pr; player.position.x *= _k; player.position.z *= _k; }
+    // 画面に送受信カウンタ表示(問題切り分け用)
+    net._dbgT += dt;
+    if (net._dbgT > 0.5) {
+      net._dbgT = 0;
+      const _el = document.getElementById('netDbg');
+      if (_el) { _el.style.display = 'block'; _el.textContent = '🌐' + (net.role || '-') + ' 送' + net._send + ' 受' + net._recv + (net.ready ? ' OK' : ' …'); }
+    }
   }
   renderer.render(scene, camera);
 }
