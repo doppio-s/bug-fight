@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v16</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v17</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2, carryT: 0, carriedT: 0, carryPending: false, thrPending: null, pushT: 0, pushPow: 0, pushResolved: false };
 window.__net = net; // 診断用
-const NET_VER = 16; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 17; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -2928,6 +2928,14 @@ function updateTheWorldE(dt) {
 
 // ===== 🌐 オンライン対戦モジュール =====
 function _netLog(m) { const el = document.getElementById('netStatus'); if (el) el.textContent = m; addDebugLog('🌐 ' + m); }
+// 🌐 NAT越え設定: STUNに加えて無料TURN中継を追加(モバイル回線などの厳しいネット環境でも繋がる)
+const _RTC_CFG = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+] };
 function _mkCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
 function _bindConn(c) {
   net.conn = c;
@@ -2947,13 +2955,24 @@ function _bindConn(c) {
     else if (d.t === 'i') net.remoteKeys = d;
   });
   c.on('close', () => { net.ready = false; _netLog('相手が切断しました'); });
-  c.on('error', () => { _netLog('通信エラー'); });
+  c.on('error', (err) => { _netLog('通信エラー: ' + ((err && (err.type || err.message)) || err) + '（ホストは部屋を作り直してみて）'); });
+  // 接続の進行状況を表示(どこで止まってるか分かるように)
+  setTimeout(() => {
+    try {
+      const pc = c.peerConnection;
+      if (pc) pc.oniceconnectionstatechange = () => {
+        addDebugLog('🌐 ICE: ' + pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed') _netLog('❌ 通信経路が作れない…(お互いのネット環境の壁)。Wi-Fi⇔モバイル回線を切り替えて再挑戦してみて');
+      };
+    } catch (e) {}
+  }, 500);
+  setTimeout(() => { if (!net.ready) _netLog('⏳ まだ繋がらない…コード確認 or ホストは部屋を作り直してみて'); }, 12000);
 }
 function _startHost() {
   if (typeof Peer === 'undefined') { _netLog('通信ライブラリ未読込(ネット接続が必要)'); return; }
   const code = _mkCode();
   net.role = 'host';
-  try { net.peer = new Peer('kbtl-' + code); } catch (e) { _netLog('作成失敗: ' + e); return; }
+  try { net.peer = new Peer('kbtl-' + code, { config: _RTC_CFG }); } catch (e) { _netLog('作成失敗: ' + e); return; }
   net.peer.on('open', () => _netLog('部屋コード【 ' + code + ' 】を相手に伝えてね（待機中…）'));
   net.peer.on('connection', (c) => _bindConn(c));
   net.peer.on('error', (err) => _netLog('エラー: ' + (err && err.type || err) + '（もう一度部屋を作り直してみて）'));
@@ -2962,7 +2981,7 @@ function _startJoin(code) {
   if (typeof Peer === 'undefined') { _netLog('通信ライブラリ未読込(ネット接続が必要)'); return; }
   if (!code) { _netLog('コードを入力してね'); return; }
   net.role = 'client';
-  try { net.peer = new Peer(); } catch (e) { _netLog('接続失敗: ' + e); return; }
+  try { net.peer = new Peer({ config: _RTC_CFG }); } catch (e) { _netLog('接続失敗: ' + e); return; }
   net.peer.on('open', () => { _netLog('接続中…'); const c = net.peer.connect('kbtl-' + code, { reliable: true, serialization: 'json' }); _bindConn(c); });
   net.peer.on('error', (err) => _netLog('エラー: ' + (err && err.type || err) + '（コードを確認してね）'));
 }
