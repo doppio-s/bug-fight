@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v15</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v16</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2567,9 +2567,9 @@ let twCooldown = 0, tweCooldown = 0;  // ザ・ワールドの再使用インタ
 // ===== 🌐 オンライン対戦(P2P・ホスト権威) =====
 let online = false;
 let _pMoving = false;
-const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2 };
+const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2, carryT: 0, carriedT: 0, carryPending: false, thrPending: null, pushT: 0, pushPow: 0, pushResolved: false };
 window.__net = net; // 診断用
-const NET_VER = 15; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 16; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -2939,7 +2939,8 @@ function _bindConn(c) {
     if (d.t === 'hello') { if (d.v !== NET_VER) { net.verBad = true; _netLog('⚠️ 相手とバージョンが違う！両方ともURLを開き直して'); } return; }
     if (d.t === 's') { net.remoteState = d; net._recv++; }
     else if (d.t === 'hit') { net.hitPending = d; }
-    else if (d.t === 'grab') { net.grabPending = d; }
+    else if (d.t === 'carry') { net.carryPending = true; }
+    else if (d.t === 'thr') { net.thrPending = d; }
     else if (d.t === 'gcounter') { net.counterPending = true; }
     else if (d.t === 'deflect') { net.deflectPending = true; }
     else if (d.t === 'ko') { if (online && !gameOver) { gameOver = true; setStatus('🏆 勝利！', true); setTimeout(() => showResult(trStatus('🏆 勝利！！'), true), 300); } }
@@ -2981,7 +2982,7 @@ function _resetForOnline() {
   worldStopped = false; worldStoppedE = false; TW.active = false; TWE.active = false;
   aiPreset = null; playerBug = 'stag'; window._forceEnemyBug = 'stag';
   _glowMats.player = null; _glowMats.enemy = null; // ★旧モデルの材質キャッシュを破棄(これが無いと新キャラが光らない)
-  net.spawnDone = false; net._lastGhostAct = 0; net.myAction = 0; net.actionT = 0; net.atkCd = 0; net.hitPending = null; net.pushChg = 0; net.grabChg = 0; net.grabPending = null; net.counterPending = false; net.deflectPending = false; net.biteT = 0; net.thrownT = 0;
+  net.spawnDone = false; net._lastGhostAct = 0; net.myAction = 0; net.actionT = 0; net.atkCd = 0; net.hitPending = null; net.pushChg = 0; net.grabChg = 0; net.grabPending = null; net.counterPending = false; net.deflectPending = false; net.biteT = 0; net.thrownT = 0; net.carryT = 0; net.carriedT = 0; net.carryPending = false; net.thrPending = null; net.pushT = 0;
   initCharacters(stagGltf);
   if (net.role === 'client' && player && enemy) {
     player.position.set(0, 0, -8); player.rotation.y = 0; // 参加側は手前(-8)側で+z向き=相手と向かい合う
@@ -3010,6 +3011,7 @@ function _applyRemoteAnim(obj, actions, w, act) {
     // act1(プッシュ)はSP同様クリップなし=突進の動きだけ(位置同期で見える)
     if (act === 4 && _pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setEffectiveTimeScale(1.0); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = STANCE_HOLD_TIME; _pa.paused = true; } // 構え(顎オープン)
     else if (act === 5 && _pa) { if (_pa.paused) _pa.paused = false; else _netPlayOnce(actions, attackAnimName, 1.0); } // 噛みつき!
+    else if (act === 6 && _pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = BITE_LOCK_TIME; _pa.paused = true; } // 運搬中(顎閉じ)
     else if (act === 2) _netPlayOnce(actions, reactAnimName, 1.0);
     net._lastGhostAct = act;
   }
@@ -3024,32 +3026,80 @@ function _applyRemoteAnim(obj, actions, w, act) {
 function _onlineAttack(dt) {
   net.atkCd -= dt;
   net.actionT -= dt;
-  if (net.actionT <= 0 && net.myAction !== 3 && net.myAction !== 4) net.myAction = (state === STATE.STUN) ? 2 : 0;
-  // --- 投げられ飛行中(放物線)。SPのTHROW仕様と同じ見た目 ---
+  if (net.actionT <= 0 && net.myAction !== 3 && net.myAction !== 4 && net.myAction !== 6) net.myAction = (state === STATE.STUN) ? 2 : 0;
+  // ===== 投げられ飛行(放物線) =====
   if (net.thrownT > 0) {
     net.thrownT -= dt;
     const _k = Math.max(0, Math.min(1, 1 - net.thrownT / net.thrownDur));
     player.position.x = net.thSx + (net.thTx - net.thSx) * _k;
     player.position.z = net.thSz + (net.thTz - net.thSz) * _k;
     player.position.y = Math.sin(_k * Math.PI) * net.thrownH;
-    player.rotation.y += dt * 9; // きりもみ回転
+    player.rotation.y += dt * 9;
     pKbX = 0; pKbZ = 0;
     if (net.thrownT <= 0) { player.position.y = 0; }
   }
-  // --- 受信: プッシュヒット(SP準拠: ガードは完全に弾き返す) ---
+  // ===== 受信: 掴まれた(運搬開始) =====
+  if (net.carryPending) {
+    net.carryPending = false;
+    if (net.pushChg > 0) {
+      // プッシュ溜め中=掴みを潰す(三すくみ)
+      try { net.conn && net.conn.send({ t: 'gcounter' }); } catch (e) {}
+      setStatus('掴みを潰した！💪', true);
+    } else {
+      net.carriedT = 0.001;
+      net.grabChg = 0; net.biteT = 0; net.pushChg = 0; net.pushT = 0;
+      stunPlayer(3.5);
+      net.myAction = 2; net.actionT = 3.5;
+      hitStopTime = 0.06;
+      spawnClashBurst(_vecPool.pf2.set(player.position.x, 1.3, player.position.z));
+      setStatus('掴まれた！運ばれてる！🦷', true);
+    }
+  }
+  // ===== 運搬されてる間: 攻撃者の顎の前に固定(ジタバタ) =====
+  if (net.carriedT > 0) {
+    net.carriedT += dt;
+    const _gf = _vecPool.pf.copy(localForward).applyQuaternion(enemy.quaternion);
+    player.position.x = enemy.position.x + _gf.x * 1.9;
+    player.position.z = enemy.position.z + _gf.z * 1.9;
+    player.position.y = 1.1 + Math.sin(performance.now() * 0.02) * 0.1;
+    player.rotation.y += Math.sin(performance.now() * 0.025) * 0.06;
+    pKbX = 0; pKbZ = 0;
+    if (state !== STATE.STUN) state = STATE.STUN;
+    stunTimer = Math.max(stunTimer, 0.5);
+    net.myAction = 2; net.actionT = 0.5;
+  }
+  // ===== 受信: 投げられた =====
+  if (net.thrPending) {
+    const th = net.thrPending; net.thrPending = null;
+    net.carriedT = 0;
+    if (isFinite(th.fx) && isFinite(th.fz)) {
+      const _pw = Math.max(0, Math.min(1, th.pow || 1));
+      net.thrownDur = 1.2;
+      net.thrownT = net.thrownDur;
+      net.thSx = player.position.x; net.thSz = player.position.z;
+      const _td = 3.0 + _pw * 5.0;
+      net.thTx = player.position.x + th.fx * _td;
+      net.thTz = player.position.z + th.fz * _td;
+      net.thrownH = 2.0 + _pw * 2.2;
+      stunPlayer(net.thrownDur + 0.5);
+      net.myAction = 2; net.actionT = net.thrownDur + 0.5;
+      shakeTime = 0.35; shakeIntensity = 0.7;
+      setStatus('投げ飛ばされた！🌀', true);
+    }
+  }
+  // ===== 受信: プッシュヒット =====
   if (net.hitPending) {
     const h = net.hitPending; net.hitPending = null;
     if (isFinite(h.fx) && isFinite(h.fz) && isFinite(h.force)) {
       const _guarding = !!(keys.ShiftLeft || keys.ShiftRight);
       if (_guarding) {
-        // ガード＞プッシュ: 弾き返す(攻撃側に通知)
         pGuardFlash = 0.3;
         shakeTime = 0.12; shakeIntensity = 0.2;
         try { net.conn && net.conn.send({ t: 'deflect' }); } catch (e) {}
         setStatus('ガードで弾いた！🛡️✨', true);
       } else {
-        let _f = Math.min(14, Math.max(0, h.force)); // SPのkbスケール(4〜11)準拠+安全上限
-        if (net.grabChg > 0) { net.grabChg = 0; net.biteT = 0; _f *= 1.4; } // 掴み溜め中は大きく吹っ飛ぶ(三すくみ)
+        let _f = Math.min(14, Math.max(0, h.force));
+        if (net.grabChg > 0 || net.biteT > 0) { net.grabChg = 0; net.biteT = 0; _f *= 1.4; }
         pKbX += h.fx * _f; pKbZ += h.fz * _f;
         stunPlayer(0.6);
         net.myAction = 2; net.actionT = 0.6;
@@ -3060,82 +3110,117 @@ function _onlineAttack(dt) {
       }
     }
   }
-  // --- 受信: 自分のプッシュがガードで弾かれた ---
+  // ===== 受信: ガードに弾かれた =====
   if (net.deflectPending) {
     net.deflectPending = false;
+    net.pushT = 0;
     const _bk = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
-    pKbX -= _bk.x * 8; pKbZ -= _bk.z * 8; // 後ろに弾かれる
+    pKbX -= _bk.x * 8; pKbZ -= _bk.z * 8;
     stunPlayer(0.5);
     net.myAction = 2; net.actionT = 0.5;
     setStatus('弾かれた！🔵', true);
   }
-  // --- 受信: 掴み(SP準拠: ガード貫通・プッシュ溜めには潰される・命中で投げ) ---
-  if (net.grabPending) {
-    const g = net.grabPending; net.grabPending = null;
-    if (net.pushChg > 0) {
-      try { net.conn && net.conn.send({ t: 'gcounter' }); } catch (e) {}
-      setStatus('掴みを潰した！💪', true);
-    } else if (isFinite(g.fx) && isFinite(g.fz)) {
-      // 投げ！(SPのTHROW: 放物線で飛ばされる)
-      net.grabChg = 0; net.biteT = 0; net.pushChg = 0;
-      const _pw = Math.max(0, Math.min(1, g.pow || 1));
-      net.thrownDur = 1.2;
-      net.thrownT = net.thrownDur;
-      net.thSx = player.position.x; net.thSz = player.position.z;
-      const _td = 4.0 + _pw * 4.0; // 投げ距離(SP相当)
-      net.thTx = player.position.x + g.fx * _td;
-      net.thTz = player.position.z + g.fz * _td;
-      net.thrownH = 2.0 + _pw * 2.2; // SPのthrowArcHeightと同式
-      stunPlayer(net.thrownDur + 0.5);
-      net.myAction = 2; net.actionT = net.thrownDur + 0.5;
-      hitStopTime = 0.09; shakeTime = 0.35; shakeIntensity = 0.7;
-      spawnClashBurst(_vecPool.pf2.set(player.position.x, 1.4, player.position.z));
-      setStatus('投げられた！🌀', true);
-    }
-  }
-  // --- 受信: 掴みがプッシュに潰された ---
+  // ===== 受信: 掴みがプッシュに潰された =====
   if (net.counterPending) {
     net.counterPending = false;
-    stunPlayer(1.3); // SPと同じ: 潰された側は長スタン
+    stunPlayer(1.3);
     net.myAction = 2; net.actionT = 1.3;
     setStatus('プッシュに潰された…', true);
   }
-  if (gameOver || !player || !enemy) { net.pushChg = 0; net.grabChg = 0; net.biteT = 0; return; }
-  // --- 噛みつき判定タイマー(構え解放→大顎が咬み込む瞬間に判定=SPと同じタイミング) ---
+  if (gameOver || !player || !enemy) { net.pushChg = 0; net.grabChg = 0; net.biteT = 0; net.carryT = 0; net.pushT = 0; return; }
+  // ===== 運搬中(自分が掴んでる側): SP同様スタミナを削りながら運ぶ。もう一回押すか時間で投げ =====
+  if (net.carryT > 0) {
+    net.carryT += dt;
+    net.myAction = 6; net.actionT = 0.2;
+    const _throwPressed = (!!net.raw.Space || !!net.raw.KeyE) && net.carryT > E_CARRY_MIN;
+    const _forced = (stamina <= 0) || net.carryT >= E_CARRY_MAX;
+    if (_throwPressed || _forced) {
+      const _pw2 = (stamina <= 0) ? 0.3 : 1.0; // スタミナ切れは弱いドロップ(SP準拠)
+      const _tf = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
+      net.carryT = 0;
+      net.atkCd = 0.8;
+      net.myAction = 1; net.actionT = 0.4;
+      const _paT = pActions[attackAnimName]; if (_paT && _paT.paused) _paT.paused = false; // 投げ振り
+      try { net.conn && net.conn.send({ t: 'thr', fx: _tf.x, fz: _tf.z, pow: _pw2 }); } catch (e) {}
+      shakeTime = 0.2; shakeIntensity = 0.4;
+      setStatus(_pw2 < 0.5 ? '💦 スタミナ切れ！離した' : '投げ捨てた！🌀', true);
+    }
+  }
+  // ===== 噛みつき判定タイマー =====
   if (net.biteT > 0) {
     net.biteT -= dt;
     if (net.biteT <= 0) _resolveOnlineBite();
   }
+  // ===== プッシュのダッシュ突進(SPのPUSHING: 0.45秒、0.08〜0.25秒に判定) =====
+  if (net.pushT > 0) {
+    net.pushT += dt;
+    const _df = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
+    const _ds = PUSH_LUNGE_SPEED + net.pushPow * 5;
+    player.position.x += _df.x * _ds * dt;
+    player.position.z += _df.z * _ds * dt;
+    net.myAction = 1; net.actionT = 0.1;
+    if (!net.pushResolved && net.pushT >= PUSH_ACTIVE_START && net.pushT <= PUSH_ACTIVE_END) {
+      player.updateMatrixWorld(true); enemy.updateMatrixWorld(true);
+      const pdx = enemy.position.x - player.position.x;
+      const pdz = enemy.position.z - player.position.z;
+      const pd = Math.hypot(pdx, pdz);
+      const facing = pd > 0.01 ? (_df.x * pdx + _df.z * pdz) / pd : 0;
+      const _pushHit = findClosestHit(pBones, _biteBonesFor(player), eBones, eColliders && eColliders.full);
+      if ((_pushHit.dist <= PUSH_CONNECT || pd <= PUSH_RANGE) && facing > 0.35) {
+        net.pushResolved = true;
+        const _force = 4.0 + net.pushPow * 7.0; // SPと同じ吹き飛び量
+        const dirx = pd > 0.01 ? pdx / pd : _df.x;
+        const dirz = pd > 0.01 ? pdz / pd : _df.z;
+        try { net.conn && net.conn.send({ t: 'hit', fx: dirx, fz: dirz, force: _force }); } catch (e) {}
+        shakeTime = 0.18; shakeIntensity = 0.35;
+        spawnClashBurst(_vecPool.pf2.set(enemy.position.x, 1.3, enemy.position.z));
+        setStatus(net.pushPow > 0.85 ? 'フルチャージプッシュ！💥' : 'プッシュ命中！🟡', true);
+      }
+    }
+    if (net.pushT >= PUSH_DURATION) {
+      if (!net.pushResolved) setStatus('スカった…', false);
+      net.pushT = 0;
+    }
+  }
   const _stunned = (state === STATE.STUN);
   const pushDown = !_stunned && (!!net.raw.KeyE || !!net.raw.KeyF);
-  const _stickGrab = joyActive && joyPullRatio > 0.15 && joyDirection === 'down'; // 📱スティック引き=掴み
+  const _stickGrab = joyActive && joyPullRatio > 0.15 && joyDirection === 'down';
   const grabDown = !_stunned && (!!net.raw.Space || _stickGrab);
-  // --- プッシュ: 押して溜め→離して発動(SPのPUSH_CHARGE準拠) ---
-  if (pushDown && net.pushChg === 0 && net.grabChg === 0 && net.biteT <= 0 && net.atkCd <= 0) net.pushChg = 0.0001;
+  const _busy = net.carryT > 0 || net.pushT > 0 || net.biteT > 0;
+  // ===== プッシュ溜め(SP: 開始時18消費+維持8/s) =====
+  if (pushDown && !_busy && net.pushChg === 0 && net.grabChg === 0 && net.atkCd <= 0) {
+    if (stamina >= STAM_COST_PUSH) { stamina -= STAM_COST_PUSH; net.pushChg = 0.0001; }
+    else setStatus('💦 スタミナ不足！', false);
+  }
   if (net.pushChg > 0) {
     net.pushChg = Math.min(PUSH_MAX_CHARGE, net.pushChg + dt);
     net.myAction = 3; net.actionT = 0.12;
     if (!pushDown || _stunned) {
       const _chg = net.pushChg; net.pushChg = 0;
-      if (!_stunned) _doOnlinePush(_chg);
+      if (!_stunned) {
+        net.pushPow = PUSH_MIN_POWER + (1 - PUSH_MIN_POWER) * Math.min(1, _chg / PUSH_MAX_CHARGE);
+        net.pushT = 0.001; net.pushResolved = false;
+        net.atkCd = 0.55;
+      }
     }
   }
-  // --- 掴み: 押して構え(大顎オープン=SPのSTANCE)→離して噛みつき ---
-  if (grabDown && net.grabChg === 0 && net.pushChg === 0 && net.biteT <= 0 && net.atkCd <= 0) {
-    net.grabChg = 0.0001;
-    // SPと同じ構えポーズ: 攻撃アニメをSTANCE_HOLD_TIMEで一時停止
-    const _pa = pActions[attackAnimName];
-    if (_pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setEffectiveTimeScale(1.0); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = STANCE_HOLD_TIME; _pa.paused = true; }
+  // ===== 掴み溜め(SP: 掴み25消費、構え5/s+突進25/s) =====
+  if (grabDown && !_busy && net.grabChg === 0 && net.pushChg === 0 && net.atkCd <= 0) {
+    if (stamina >= STAM_MIN_GRAB) {
+      stamina -= STAM_COST_GRAB;
+      net.grabChg = 0.0001;
+      const _pa = pActions[attackAnimName];
+      if (_pa) { _pa.stop(); _pa.reset(); _pa.enabled = true; _pa.setEffectiveWeight(1); _pa.setEffectiveTimeScale(1.0); _pa.setLoop(THREE.LoopOnce, 1); _pa.play(); _pa.time = STANCE_HOLD_TIME; _pa.paused = true; }
+    } else setStatus('💦 スタミナ不足！', false);
   }
   if (net.grabChg > 0) {
     net.grabChg = Math.min(1.2, net.grabChg + dt);
     net.myAction = 4; net.actionT = 0.12;
     const _paH = pActions[attackAnimName];
-    if (_paH && _paH.paused) _paH.time = STANCE_HOLD_TIME * (_stickGrab ? Math.min(1, joyPullRatio * 1.2) : 1); // 引き量=顎の開き(SPと同じ)
+    if (_paH && _paH.paused) _paH.time = STANCE_HOLD_TIME * (_stickGrab ? Math.min(1, joyPullRatio * 1.2) : 1);
     if (!grabDown || _stunned) {
       net.grabChg = 0;
       if (!_stunned) {
-        // 解放=噛みつき動作再開(SPのBITING)。判定は咬み込む瞬間(BITE_LOCK_TIME)
         const _pa2 = pActions[attackAnimName];
         if (_pa2 && _pa2.paused) _pa2.paused = false;
         net.biteT = Math.max(0.1, BITE_LOCK_TIME - STANCE_HOLD_TIME);
@@ -3145,45 +3230,21 @@ function _onlineAttack(dt) {
     }
   }
 }
-function _doOnlinePush(chg) {
-  net.atkCd = 0.55;
-  net.myAction = 1; net.actionT = 0.45; // SP準拠: プッシュは体当たり(顎クリップは再生しない)
-  const _f = _vecPool.pf.copy(localForward).applyQuaternion(player.quaternion);
-  pKbX += _f.x * PUSH_LUNGE_SPEED; pKbZ += _f.z * PUSH_LUNGE_SPEED; // SPの踏み込み速度
-  // ★SPと同じ命中判定: 体表面距離 or 中心距離 + 正面判定
-  player.updateMatrixWorld(true); enemy.updateMatrixWorld(true);
-  const pdx = enemy.position.x - player.position.x;
-  const pdz = enemy.position.z - player.position.z;
-  const pd = Math.hypot(pdx, pdz);
-  const facing = pd > 0.01 ? (_f.x * pdx + _f.z * pdz) / pd : 0;
-  const _pushHit = findClosestHit(pBones, _biteBonesFor(player), eBones, eColliders && eColliders.full);
-  if ((_pushHit.dist <= PUSH_CONNECT || pd <= PUSH_RANGE) && facing > 0.35) {
-    // SPの威力式: PUSH_MIN_POWER〜1.0 → 吹き飛び4〜11
-    const _pw = PUSH_MIN_POWER + (1 - PUSH_MIN_POWER) * Math.min(1, chg / PUSH_MAX_CHARGE);
-    const _force = 4.0 + _pw * 7.0;
-    const dirx = pd > 0.01 ? pdx / pd : _f.x;
-    const dirz = pd > 0.01 ? pdz / pd : _f.z;
-    try { net.conn && net.conn.send({ t: 'hit', fx: dirx, fz: dirz, force: _force }); } catch (e) {}
-    shakeTime = 0.18; shakeIntensity = 0.35;
-    spawnClashBurst(_vecPool.pf2.set(enemy.position.x, 1.3, enemy.position.z));
-    setStatus(_pw > 0.85 ? 'フルチャージプッシュ！💥' : 'プッシュ命中！🟡', true);
-  } else {
-    setStatus('スカった…', false);
-  }
-}
 function _resolveOnlineBite() {
   net.atkCd = 0.7;
-  // ★SPと同じ噛みつき判定: ボーンコライダーの最近接距離
   player.updateMatrixWorld(true); enemy.updateMatrixWorld(true);
   const hit = findClosestHit(pBones, _biteBonesFor(player), eBones, eColliders && eColliders.full);
   const _rs = net.remoteState;
-  const _grabRange = (_rs && _rs.g) ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE; // ガード相手には広め(SP準拠)
+  const _grabRange = (_rs && _rs.g) ? BITE_CONNECT_RANGE * 1.7 : BITE_CONNECT_RANGE;
   if (hit.dist <= _grabRange) {
-    const dx = enemy.position.x - player.position.x, dz = enemy.position.z - player.position.z;
-    const dd = Math.hypot(dx, dz) || 1;
-    try { net.conn && net.conn.send({ t: 'grab', fx: dx / dd, fz: dz / dd, pow: 1.0 }); } catch (e) {}
+    // ★SPと同じ: 掴んだら「運搬」開始。端まで運んでもう一度ボタンで投げ捨て！
+    net.carryT = 0.001;
+    net.myAction = 6; net.actionT = 0.3;
+    const _pa = pActions[attackAnimName];
+    if (_pa) { _pa.paused = true; _pa.time = BITE_LOCK_TIME; } // 顎を閉じたまま保持
+    try { net.conn && net.conn.send({ t: 'carry' }); } catch (e) {}
     hitStopTime = 0.06;
-    setStatus('がっちり噛みついた！🔴', true);
+    setStatus('がっちり掴んだ！運んで端から捨てろ！🦷', true);
   } else {
     setStatus('スカった…', false);
   }
@@ -4704,7 +4765,7 @@ joyThrowRequest = false; // 消費
       bobBlend += (_target - bobBlend) * Math.min(1, dt * 10); // 発停を滑らかに
       const _cyclesPerSec = (locoSpeed * STEP_CADENCE) / 1.375; // 脚の周期/秒(歩調)
       walkBobPhase += _cyclesPerSec * dt;
-      if (!gameOver && !playerThrown && !(online && net.thrownT > 0)) {
+      if (!gameOver && !playerThrown && !(online && (net.thrownT > 0 || net.carriedT > 0))) {
         // 1歩ごとに体が沈んで踏ん張る(1周期に2歩=abs sinで2バウンド)
         const _bob = Math.abs(Math.sin(walkBobPhase * Math.PI * 2)) * BOB_AMP;
         player.position.y = _bob * bobBlend;
@@ -4839,6 +4900,12 @@ joyThrowRequest = false; // 消費
     let drain = 0;
     if (state === STATE.STANCE && (keys.KeyW || keys.ArrowUp)) drain += STAM_DRAIN_CHARGE;
     else if (state === STATE.STANCE) drain += STAM_DRAIN_STANCE;
+    if (online) { // 🌐オンラインの構え/溜め/運搬もSPと同じ速度で消費
+      if (net.grabChg > 0 && (keys.KeyW || keys.ArrowUp)) drain += STAM_DRAIN_CHARGE;
+      else if (net.grabChg > 0) drain += STAM_DRAIN_STANCE;
+      if (net.pushChg > 0) drain += STAM_DRAIN_PUSH_CHARGE;
+      if (net.carryT > 0) drain += STAM_DRAIN_CARRY;
+    }
     if (guardHeld) drain += STAM_DRAIN_GUARD;
     if (state === STATE.CARRYING) drain += STAM_DRAIN_CARRY;
     if (drain > 0) {
@@ -4890,6 +4957,7 @@ joyThrowRequest = false; // 消費
         else if (state === STATE.STANCE || state === STATE.BITING) { col = GRAB_GLOW; inten = 1.1; } // 掴み構え/噛みつき=黄
         else if (online && net.myAction === 1) { col = PUSH_GLOW; inten = 1.25; }                // 🌐プッシュ攻撃=黄フラッシュ
         else if (online && net.myAction === 5) { col = GRAB_GLOW; inten = 1.4; }                 // 🌐噛みつき中=赤フラッシュ
+        else if (online && net.myAction === 6) { col = GRAB_GLOW; inten = 1.1; }                 // 🌐運搬中=赤
         else if (online && net.myAction === 3) { col = PUSH_GLOW; inten = 0.5 + Math.min(1, net.pushChg) * 1.2; } // 🌐プッシュ溜め=黄が強まる
         else if (online && net.myAction === 4) { col = GRAB_GLOW; inten = 0.6 + Math.min(1, net.grabChg) * 0.9; } // 🌐掴み溜め=赤
         else if (guardHeld) { col = GUARD_GLOW; inten = 0.95; }                                  // ガード=青
@@ -4906,6 +4974,7 @@ joyThrowRequest = false; // 消費
             else if (_rs.a === 3) { col = PUSH_GLOW; inten = 0.9; }      // 🌐相手プッシュ溜め=黄(逃げるかガード!)
             else if (_rs.a === 4) { col = GRAB_GLOW; inten = 1.0; }      // 🌐相手掴み溜め=赤(プッシュで潰せ!)
             else if (_rs.a === 5) { col = GRAB_GLOW; inten = 1.4; }      // 🌐相手噛みつき!
+            else if (_rs.a === 6) { col = GRAB_GLOW; inten = 1.1; }      // 🌐相手運搬中
             else if (_rs.a === 2) { col = STUN_GLOW; inten = _pulse * 0.45; } // 🌐相手スタン=うっすら白
             else if (_rs.g) { col = GUARD_GLOW; inten = 0.8; }          // 🌐相手ガード=青
           }
