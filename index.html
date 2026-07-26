@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>クワガタバトル</title>
+<title>tungtungtungbros</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Reggae+One&display=swap" rel="stylesheet">
@@ -392,7 +392,7 @@
 </div>
 
 <div id="diffOverlay">
-  <div id="titleMain">🪲 クワガタバトル</div>
+  <div id="titleMain">🪵 tungtungtungbros</div>
   <div id="titleSub">切り株の上で組み合い、相手を場外へ突き落とせ！</div>
   <div class="threeway-box">
     <div class="tw-head">🎯 三すくみ（技は色で光る）</div>
@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v19</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v20</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -1482,9 +1482,9 @@ document.querySelectorAll('.diffBtn').forEach(btn => {
 }
 // ★英語UI: 日本語圏以外のブラウザでは画面テキストを全部英語に
 if (IS_EN) {
-  document.title = 'Stag Beetle Battle';
+  document.title = 'tungtungtungbros';
   const _t = (sel, txt) => { const el = document.querySelector(sel); if (el) el.textContent = txt; };
-  _t('#titleMain', '🪲 STAG BEETLE BATTLE');
+  _t('#titleMain', '🪵 tungtungtungbros');
   _t('#titleSub', 'Grapple on the tree stump — shove your rival off the edge!');
   const _boxes = document.querySelectorAll('#diffOverlay .threeway-box');
   if (_boxes[0]) _boxes[0].innerHTML = '<div class="tw-head">🎯 The Triangle (moves glow by color)</div>'
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2, carryT: 0, carriedT: 0, carryPending: false, thrPending: null, pushT: 0, pushPow: 0, pushResolved: false };
 window.__net = net; // 診断用
-const NET_VER = 19; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 20; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -3328,6 +3328,18 @@ function wireOnlineLobby() {
   if (jb && jc) { const _j = (e) => { if (e) e.preventDefault(); _startJoin((jc.value || '').trim().toUpperCase()); }; jb.addEventListener('click', _j); jb.addEventListener('touchstart', _j); }
 }
 wireOnlineLobby();
+// 🚀 公開モード: デバッグ表示は ?debug 付きURLの時だけ。操作説明パネルもゲーム中は非表示
+const _DEBUG_UI = /[?&]debug/.test(location.search);
+if (!_DEBUG_UI) { const _dp = document.getElementById('debugPanel'); if (_dp) _dp.style.display = 'none'; }
+setInterval(() => {
+  const _ov = document.getElementById('diffOverlay');
+  const _playing = _ov && _ov.classList.contains('hide');
+  const _inf = document.getElementById('info');
+  if (_inf) _inf.style.display = _playing ? 'none' : '';
+  if (!_DEBUG_UI) {
+    const _dp2 = document.getElementById('debugPanel'); if (_dp2) _dp2.style.display = 'none';
+  }
+}, 500);
 // 🌐 生入力の記録(ゲーム側のkeysはオンライン中クリアされるため、押しっぱなし検出用に独立して持つ)
 window.addEventListener('keydown', (e) => { net.raw[e.code] = true; });
 window.addEventListener('keyup', (e) => { net.raw[e.code] = false; });
@@ -5132,7 +5144,7 @@ joyThrowRequest = false; // 消費
     net._dbgT += dt;
     if (net._dbgT > 0.5) {
       net._dbgT = 0;
-      const _el = document.getElementById('netDbg');
+      const _el = _DEBUG_UI ? document.getElementById('netDbg') : null;
       if (_el) { _el.style.display = 'block'; _el.style.color = net.verBad ? '#f66' : '#9f9'; _el.textContent = (net.verBad ? '⚠️版違い!両方リロードして ' : '') + '🌐v' + NET_VER + ' ' + (net.role || '-') + ' 送' + net._send + ' 受' + net._recv + (net.ready ? ' OK' : ' …') + ' P' + Math.round(player.position.x) + ',' + Math.round(player.position.z) + ' E' + Math.round(enemy.position.x) + ',' + Math.round(enemy.position.z); }
     }
   }
