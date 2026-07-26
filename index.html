@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v17</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v18</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -2569,7 +2569,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2, carryT: 0, carriedT: 0, carryPending: false, thrPending: null, pushT: 0, pushPow: 0, pushResolved: false };
 window.__net = net; // 診断用
-const NET_VER = 17; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 18; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -3080,8 +3080,8 @@ function _onlineAttack(dt) {
     const _gf = _vecPool.pf.copy(localForward).applyQuaternion(enemy.quaternion);
     player.position.x = enemy.position.x + _gf.x * 1.9;
     player.position.z = enemy.position.z + _gf.z * 1.9;
-    player.position.y = 1.1 + Math.sin(performance.now() * 0.02) * 0.1;
-    player.rotation.y += Math.sin(performance.now() * 0.025) * 0.06;
+    player.position.y = 1.1 + Math.sin(performance.now() * 0.02) * 0.05;
+    player.rotation.y += Math.sin(performance.now() * 0.025) * 0.025;
     pKbX = 0; pKbZ = 0;
     if (state !== STATE.STUN) state = STATE.STUN;
     stunTimer = Math.max(stunTimer, 0.5);
@@ -3576,7 +3576,7 @@ function animate() {
       }
       _tvx *= speedMult; _tvz *= speedMult;
       // ロックオン自動注視(運搬・掴み中は無効=クルクル回り防止)
-      if (lockOnActive && enemy && state !== STATE.CARRYING && enemyState !== ENEMY_STATE.GRIPPED) {
+      if (lockOnActive && enemy && state !== STATE.CARRYING && enemyState !== ENEMY_STATE.GRIPPED && !(online && (net.carryT > 0 || net.carriedT > 0))) {
         const dxL = enemy.position.x - player.position.x;
         const dzL = enemy.position.z - player.position.z;
         if (Math.hypot(dxL, dzL) > 0.01) {
@@ -5095,6 +5095,13 @@ joyThrowRequest = false; // 消費
           net._gpx = enemy.position.x; net._gpz = enemy.position.z;
         }
         _applyRemoteAnim(enemy, eActions, s.w, s.a || 0);
+        // 自分が運搬中は、相手の見た目位置を自分の顎の前にローカル固定(遅延による揺れ防止)
+        if (net.carryT > 0) {
+          const _cf = _vecPool.eb.copy(localForward).applyQuaternion(player.quaternion);
+          enemy.position.x = player.position.x + _cf.x * 1.9;
+          enemy.position.z = player.position.z + _cf.z * 1.9;
+          enemy.position.y = 1.1;
+        }
       } else {
         net.remoteState = null; // 形式違い(旧バージョンの相手など)は無視
       }
