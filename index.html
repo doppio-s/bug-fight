@@ -421,7 +421,7 @@
     <button class="diffBtn" data-level="4">💀 最強</button>
   </div>
   <div id="onlineWrap" style="margin-top:14px;">
-    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v21</span></button>
+    <button id="onlineToggle" style="padding:10px 22px;font-size:16px;font-family:inherit;background:rgba(20,40,60,0.85);border:2px solid #3a6b8a;border-radius:10px;color:#a0d8ff;cursor:pointer;">🌐 オンライン対戦（友達と）<span id="verTag" style="font-size:11px;color:#7fd;">v22</span></button>
     <div id="onlineBox" style="display:none;margin-top:12px;background:rgba(0,0,0,0.35);padding:12px;border-radius:10px;">
       <div style="margin-bottom:8px;font-size:13px;color:#cfe;line-height:1.5;">片方が「部屋を作る」→出たコードを相手に伝える→<br>もう片方がコードを入力して「参加」</div>
       <button id="hostBtn" style="padding:8px 18px;font-size:15px;font-family:inherit;background:rgba(40,60,30,0.9);border:2px solid #6b8a3a;border-radius:8px;color:#dfffa0;cursor:pointer;">🏠 部屋を作る</button>
@@ -448,6 +448,7 @@
 </div>
 
 <div id="netDbg" style="position:fixed;left:8px;bottom:8px;z-index:260;font:12px monospace;color:#9f9;background:rgba(0,0,0,0.55);padding:3px 7px;border-radius:6px;display:none;"></div>
+<button id="sndBtn" title="音ON/OFF" style="position:fixed;top:10px;right:118px;z-index:250;padding:8px 12px;font-family:inherit;font-size:14px;background:rgba(25,28,40,0.82);border:2px solid #6a7a99;border-radius:10px;color:#dde6ff;cursor:pointer;">🔊</button>
 <button id="homeBtn" title="タイトルに戻る" style="position:fixed;top:10px;right:12px;z-index:250;padding:8px 14px;font-family:inherit;font-size:14px;background:rgba(25,28,40,0.82);border:2px solid #6a7a99;border-radius:10px;color:#dde6ff;cursor:pointer;">🏠 タイトル</button>
 <div id="loading">
   <div>🪲 読み込み中...</div>
@@ -1244,6 +1245,8 @@ function showResult(text, won) {
 }
 const restartBtnEl = document.getElementById('restartBtn');
 if (restartBtnEl) restartBtnEl.addEventListener('click', () => location.reload());
+const sndBtnEl = document.getElementById('sndBtn');
+if (sndBtnEl) { const _sb2 = (e) => { if (e) e.preventDefault(); sndOn = !sndOn; try { if (!sndOn) speechSynthesis.cancel(); } catch (_) {} sndBtnEl.textContent = sndOn ? '🔊' : '🔇'; }; sndBtnEl.addEventListener('click', _sb2); sndBtnEl.addEventListener('touchstart', _sb2); }
 const homeBtnEl = document.getElementById('homeBtn');
 if (homeBtnEl) { const _hb = (e) => { if (e) e.preventDefault(); location.reload(); }; homeBtnEl.addEventListener('click', _hb); homeBtnEl.addEventListener('touchstart', _hb); }
 
@@ -1602,7 +1605,67 @@ function spawnGuardEffect(pos) {
     clashEffects.push({ obj: s, kind: 'sprite', age: 0, maxAge: 0.45, type: 'spark', vx: Math.cos(ang) * spd, vz: Math.sin(ang) * spd, vy: 1.2 + Math.random() * 2.8 });
   }
 }
+// ===== 🥁 Tung Tung Tung サウンド(コード合成太鼓 + 端末のAI読み上げ) =====
+let sndOn = true;
+let _actx = null;
+function _ac() {
+  if (!_actx) { try { _actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (_actx && _actx.state === 'suspended') { try { _actx.resume(); } catch (e) {} }
+  return _actx;
+}
+function playTung(freq, dur, vol, drop) {
+  if (!sndOn) return;
+  freq = freq || 115; dur = dur || 0.28; vol = vol === undefined ? 0.8 : vol; drop = drop || 0.55;
+  try {
+    const ctx = _ac(); if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(freq, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * drop), t0 + 0.09);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0 + dur + 0.02);
+    const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o2.frequency.setValueAtTime(freq * 2.31, t0);
+    g2.gain.setValueAtTime(vol * 0.3, t0);
+    g2.gain.exponentialRampToValueAtTime(0.001, t0 + dur * 0.7);
+    o2.connect(g2).connect(ctx.destination); o2.start(t0); o2.stop(t0 + dur);
+    const nb = ctx.createBuffer(1, 2205, ctx.sampleRate);
+    const nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = (Math.random() * 2 - 1) * Math.exp(-i / 300);
+    const ns = ctx.createBufferSource(); ns.buffer = nb;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 1.2;
+    const ng = ctx.createGain(); ng.gain.value = vol * 0.5;
+    ns.connect(bp); bp.connect(ng); ng.connect(ctx.destination); ns.start(t0);
+  } catch (e) {}
+}
+function playJingle() {
+  const seqs = [[115, 0], [115, 0.22], [115, 0.44], [95, 0.78], [140, 1.02], [140, 1.24], [95, 1.56]];
+  for (const sq of seqs) setTimeout(() => playTung(sq[0], sq[0] < 100 ? 0.5 : 0.28, 0.85), sq[1] * 1000);
+}
+function playTWRoll() {
+  for (let i = 0; i < 8; i++) setTimeout(() => playTung(110 + i * 8, 0.16, 0.45 + i * 0.06), i * 90);
+  setTimeout(() => playTung(70, 0.8, 1.0), 780);
+}
+function speakSahur(txt) {
+  if (!sndOn) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(txt || 'tung tung tung tung sahur');
+    const vs = speechSynthesis.getVoices();
+    u.voice = vs.find(v => /^id/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || vs[0] || null;
+    u.rate = 0.85; u.pitch = 0.55; u.volume = 1;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+// タイトルで最初に触った時: 太鼓ジングル+サフール(自動再生制限の解除も兼ねる)
+window.addEventListener('DOMContentLoaded', () => {
+  const ov = document.getElementById('diffOverlay');
+  if (ov) ov.addEventListener('pointerdown', () => { _ac(); playJingle(); setTimeout(() => speakSahur(), 500); }, { once: true });
+});
 function spawnClashBurst(pos) {
+  playTung(125 + Math.random() * 40, 0.22, 0.7); // 衝撃と同時に「トゥン!」
   const flash = _acqSprite();
   flash.material.color.setHex(0xffffff); flash.material.opacity = 1;
   flash.position.copy(pos); flash.scale.setScalar(0.6);
@@ -2569,7 +2632,7 @@ let online = false;
 let _pMoving = false;
 const net = { peer: null, conn: null, role: null, remoteKeys: {}, snap: null, remoteState: null, lastSend: 0, _eWalk: false, ready: false, _send: 0, _recv: 0, _dbgT: 0, myAction: 0, actionT: 0, atkCd: 0, hitPending: null, spawnDone: false, _lastGhostAct: 0, raw: {}, pushChg: 0, grabChg: 0, grabPending: null, counterPending: false, deflectPending: false, biteT: 0, thrownT: 0, thrownDur: 1, thSx: 0, thSz: 0, thTx: 0, thTz: 0, thrownH: 2, carryT: 0, carriedT: 0, carryPending: false, thrPending: null, pushT: 0, pushPow: 0, pushResolved: false };
 window.__net = net; // 診断用
-const NET_VER = 21; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
+const NET_VER = 22; // 🌐プロトコル版。相手と不一致なら警告(片方だけ古い問題の検出)
 let _atkWasDown = false; // オンライン攻撃ボタンの押下エッジ検出
 const TW_COOLDOWN = 5.0;               // ★使用後この秒数は再発動不可(インターバル)
 const TW = { active: false, phase: '', t: 0, hitTimer: 0, hits: 0, kb: 0, dir: new THREE.Vector3(0, 0, 1) };
@@ -2656,6 +2719,7 @@ function startTheWorld() {
     return false;
   }
   stamina -= TW_COST;
+  playTWRoll(); speakSahur('tung tung tung tung sahur!!'); // ⏱🥁
   TW.active = true; TW.phase = 'charge'; TW.t = 0; TW.hitTimer = 0; TW.hits = 0; TW.kb = 0; TW.rip = 0;
   worldStopped = false;              // ★溜め中はまだ止めない(相手は自由に動ける=殴って止められる)
   state = STATE.THEWORLD;            // 自分は1秒間コミット(動けない=リスク)
@@ -2797,6 +2861,7 @@ function startTheWorldE() {
   if (tweCooldown > 0) { return false; }
   if (enemyStamina < TW_COST) { addDebugLog('🤖💤 敵ザ・ワールド不発(スタミナ' + Math.floor(enemyStamina) + '/' + TW_COST + ')'); return false; }
   enemyStamina -= TW_COST;
+  playTWRoll(); // 🥁
   TWE.active = true; TWE.phase = 'charge'; TWE.t = 0; TWE.hitTimer = 0; TWE.hits = 0; TWE.kb = 0; TWE.rip = 0;
   worldStoppedE = false;             // ★溜め中はプレイヤーは動ける=殴って止められる
   TWE.dir.set(player.position.x - enemy.position.x, 0, player.position.z - enemy.position.z);
